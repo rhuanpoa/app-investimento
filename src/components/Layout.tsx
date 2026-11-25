@@ -1,0 +1,114 @@
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { CircleHelp, LogOut, Newspaper, SlidersHorizontal, Wallet, type LucideIcon } from 'lucide-react'
+import { INDICES } from '../data/mock'
+import { useStore } from '../data/store'
+import { Logo } from './ui'
+import { pctArrow, toneOf } from '../lib/format'
+
+const NAV: { to: string; label: string; short: string; icon: LucideIcon }[] = [
+  { to: '/carteira', label: 'Minha Carteira', short: 'Carteira', icon: Wallet },
+  { to: '/painel', label: 'Painel do Investidor', short: 'Painel', icon: SlidersHorizontal },
+  { to: '/noticias', label: 'Notícias e Mercado', short: 'Notícias', icon: Newspaper },
+  { to: '/ajuda', label: 'Central de Ajuda', short: 'Ajuda', icon: CircleHelp },
+]
+
+function TickerStrip() {
+  const items = [...INDICES, ...INDICES, ...INDICES, ...INDICES]
+  return (
+    <div aria-label="Índices de mercado" className="h-[34px] flex-none bg-s0 border-b border-line overflow-hidden flex items-center max-lg:hidden">
+      <div className="ticker-track">
+        {items.map((it, i) => (
+          <span key={i} className="inline-flex items-center gap-2 mr-10 whitespace-nowrap" aria-hidden={i >= INDICES.length}>
+            <span className="mono text-[12px] font-semibold text-tx3 tracking-[.04em]">{it.label}</span>
+            <span className="mono text-[12.5px] font-medium text-tx">{it.value}</span>
+            <span className={`mono text-[12px] font-medium ${toneOf(it.change)}`}>{pctArrow(it.change)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function initials(email: string) {
+  return (email.split('@')[0].replace(/[^a-z]/gi, '').slice(0, 2) || 'IV').toUpperCase()
+}
+
+export default function Layout() {
+  const { user, logout: signOut, demo, demoQuotes } = useStore()
+  const navigate = useNavigate()
+  const email = user?.email ?? ''
+  const logout = async () => { await signOut(); navigate('/login') }
+  const notice = demo
+    ? { title: 'Modo demonstração.', long: 'Dados de exemplo até ligar o Supabase e as cotações reais.', short: 'Dados de exemplo.' }
+    : demoQuotes
+      ? { title: 'Cotações de exemplo.', long: 'Seus dados já ficam no Supabase; os preços ainda são fictícios até ligarmos a fonte de cotações.', short: 'Preços ainda fictícios.' }
+      : null
+
+  return (
+    <div className="min-h-screen flex flex-col bg-bg text-tx">
+      <TickerStrip />
+
+      {/* Cabeçalho do celular */}
+      <header className="lg:hidden sticky top-0 z-30 h-14 flex-none flex items-center justify-between pl-4 pr-2 bg-s0 border-b border-line">
+        <Logo />
+        <div className="flex items-center">
+          <span className="w-[34px] h-[34px] rounded-full bg-s3 border border-line-strong inline-flex items-center justify-center">
+            <span className="mono text-[12px] font-semibold">{initials(email)}</span>
+          </span>
+          <button type="button" className="btn-icon" aria-label="Sair" onClick={logout}><LogOut size={18} /></button>
+        </div>
+      </header>
+
+      <div className="flex flex-1">
+        {/* Menu lateral (desktop) */}
+        <aside className="max-lg:hidden sticky top-0 h-screen flex-[0_0_232px] w-[232px] bg-s0 border-r border-line flex flex-col pt-[18px] px-3 pb-4">
+          <div className="pt-1 px-2 pb-[22px]"><Logo /></div>
+          <nav aria-label="Navegação principal" className="flex flex-col gap-1">
+            {NAV.map(({ to, label, icon: Icon }) => (
+              <NavLink key={to} to={to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <Icon size={19} strokeWidth={1.75} aria-hidden="true" />
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="flex-1" />
+          {notice && (
+            <div className="mx-1 mb-3 p-3 rounded-lg text-[12px] leading-[1.45] text-tx2" style={{ background: 'rgba(245,184,61,0.08)', border: '1px solid rgba(245,184,61,0.3)' }}>
+              <span className="font-semibold text-accent">{notice.title}</span> {notice.long}
+            </div>
+          )}
+          <div className="flex items-center gap-2.5 pt-3.5 px-1 border-t border-line">
+            <span className="w-9 h-9 rounded-full bg-s3 border border-line-strong inline-flex items-center justify-center flex-none">
+              <span className="mono text-[12px] font-semibold">{initials(email)}</span>
+            </span>
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-[13px] font-semibold">Investidor</span>
+              <span className="text-[12px] text-tx3 overflow-hidden text-ellipsis whitespace-nowrap">{email}</span>
+            </div>
+            <button type="button" className="btn-icon" aria-label="Sair" onClick={logout}><LogOut size={18} /></button>
+          </div>
+        </aside>
+
+        <main className="flex-1 min-w-0 px-4 pt-4 pb-24 lg:px-8 lg:pt-7 lg:pb-12 flex flex-col gap-4 lg:gap-6">
+          {notice && (
+            <div className="lg:hidden p-3 rounded-lg text-[12px] text-tx2" style={{ background: 'rgba(245,184,61,0.08)', border: '1px solid rgba(245,184,61,0.3)' }}>
+              <span className="font-semibold text-accent">{notice.title}</span> {notice.short}
+            </div>
+          )}
+          <Outlet />
+        </main>
+      </div>
+
+      {/* Barra inferior (celular) */}
+      <nav aria-label="Navegação principal" className="lg:hidden fixed bottom-0 inset-x-0 z-30 grid grid-cols-4 bg-s0 border-t border-line">
+        {NAV.map(({ to, short, icon: Icon }) => (
+          <NavLink key={to} to={to}
+            className={({ isActive }) => `flex flex-col items-center justify-center gap-1 min-h-16 text-[11px] ${isActive ? 'text-accent font-semibold' : 'text-tx2 font-medium'}`}>
+            <Icon size={22} strokeWidth={1.75} aria-hidden="true" />
+            {short}
+          </NavLink>
+        ))}
+      </nav>
+    </div>
+  )
+}
