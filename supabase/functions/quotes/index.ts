@@ -173,7 +173,7 @@ async function refreshCrypto(list: { a: AssetReq; row: any }[]) {
 async function refreshIndices(admin: ReturnType<typeof createClient>) {
   const { data: rows } = await admin.from('market_indices').select('*')
   const newest = Math.max(0, ...(rows ?? []).map((r: any) => new Date(r.updated_at).getTime()))
-  if (Date.now() - newest < INDEX_TTL) return
+  if ((rows ?? []).length >= 4 && Date.now() - newest < INDEX_TTL) return
   const upserts: { label: string; value: number; change: number; position: number; updated_at: string }[] = []
   const now = new Date().toISOString()
   const tryIndex = async (label: string, sym: string, pos: number) => {
@@ -185,11 +185,24 @@ async function refreshIndices(admin: ReturnType<typeof createClient>) {
   }
   await tryIndex('IBOV', '^BVSP', 0)
   await tryIndex('IFIX', 'IFIX', 1)
+  // Dólar: AwesomeAPI (tempo real); se falhar, Frankfurter (fechamento diário do BCE)
+  let usd: { value: number; change: number } | null = null
   try {
     const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL')
-    const d = (await r.json())?.USDBRL
-    if (d?.bid) upserts.push({ label: 'USD/BRL', value: Number(d.bid), change: Number(d.pctChange ?? 0), position: 2, updated_at: now })
-  } catch (e) { console.warn('dólar', String(e)) }
+    const d = r.ok ? (await r.json())?.USDBRL : null
+    if (d?.bid) usd = { value: Number(d.bid), change: Number(d.pctChange ?? 0) }
+    else console.warn('dólar awesomeapi', r.status)
+  } catch (e) { console.warn('dólar awesomeapi', String(e)) }
+  if (!usd) {
+    try {
+      const start = day(new Date(Date.now() - 10 * 86400000))
+      const r = await fetch(`https://api.frankfurter.dev/v1/${start}..?base=USD&symbols=BRL`)
+      const rates = Object.entries((await r.json())?.rates ?? {}).sort(([a], [b]) => a.localeCompare(b)) as [string, { BRL: number }][]
+      const last = rates.at(-1)?.[1]?.BRL, prev = rates.at(-2)?.[1]?.BRL
+      if (last) usd = { value: last, change: prev ? (last / prev - 1) * 100 : 0 }
+    } catch (e) { console.warn('dólar frankfurter', String(e)) }
+  }
+  if (usd) upserts.push({ label: 'USD/BRL', ...usd, position: 2, updated_at: now })
   try {
     const p = await coingecko('/simple/price?ids=bitcoin&vs_currencies=brl&include_24hr_change=true')
     if (p?.bitcoin?.brl) upserts.push({ label: 'BTC', value: p.bitcoin.brl, change: p.bitcoin.brl_24h_change ?? 0, position: 3, updated_at: now })
