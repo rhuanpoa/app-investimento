@@ -94,7 +94,7 @@ function MobileAssetCard({ h }: { h: Holding }) {
 }
 
 export default function Carteira() {
-  const { transactions, dividends, quotes, profile } = useStore()
+  const { transactions, dividends, quotes, profile, quotesUpdatedAt } = useStore()
   const [modal, setModal] = useState(false)
   const [range, setRange] = useState<Range>('1M')
   const [filter, setFilter] = useState<'todos' | AssetType>('todos')
@@ -106,7 +106,7 @@ export default function Carteira() {
   const series = useMemo(() => portfolioSeries(rows, quotes, RANGE_DAYS[range]), [rows, quotes, range])
   const divTotal = dividends.reduce((s, d) => s + d.amount, 0)
   const classes = new Set(rows.map((r) => r.type)).size
-  const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const now = (quotesUpdatedAt ?? new Date()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   const shown = filter === 'todos' ? rows : rows.filter((r) => r.type === filter)
   const sChange = series.length ? series[series.length - 1] - series[0] : 0
   const sPct = series.length && series[0] ? (sChange / series[0]) * 100 : 0
@@ -121,7 +121,7 @@ export default function Carteira() {
     <>
       <PageHeader
         title="Minha Carteira"
-        subtitle={rows.length ? `${rows.length} ativos · cotações atualizadas às ${now} (atraso de 15 min)` : 'Nenhum ativo cadastrado'}
+        subtitle={rows.length ? `${rows.length} ativos · cotações verificadas às ${now} (B3 com atraso de até 30 min)` : 'Nenhum ativo cadastrado'}
         action={newBtn}
       />
 

@@ -2,18 +2,18 @@ import { useMemo, useState } from 'react'
 import { Check, Minus, Plus } from 'lucide-react'
 import { Field, Modal, TypeBadge } from './ui'
 import AssetSearch from './AssetSearch'
-import { uid, useStore } from '../data/store'
-import type { Quote } from '../data/types'
+import { uid, useStore, type SearchResult } from '../data/store'
 import { positions } from '../lib/calc'
 import { brl, decimal, parseBR } from '../lib/format'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
 export default function NovaOperacao({ onClose }: { onClose: () => void }) {
-  const { transactions, addTransaction } = useStore()
+  const { transactions, addTransaction, ensureQuote, quotes } = useStore()
+  const [loadingQuote, setLoadingQuote] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [side, setSide] = useState<'compra' | 'venda'>('compra')
-  const [asset, setAsset] = useState<Quote | null>(null)
+  const [asset, setAsset] = useState<SearchResult | null>(null)
   const [qtyS, setQtyS] = useState('')
   const [priceS, setPriceS] = useState('')
   const [feesS, setFeesS] = useState('0,00')
@@ -77,12 +77,19 @@ export default function NovaOperacao({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <AssetSearch label="Ativo" value={asset} onSelect={(q) => { setAsset(q); if (!priceS) setPriceS(decimal(q.price)) }} />
+        <AssetSearch label="Ativo" value={asset} onSelect={async (q) => {
+          setAsset(q)
+          if (q.price != null && !priceS) setPriceS(decimal(q.price))
+          setLoadingQuote(true)
+          const full = await ensureQuote(q)
+          setLoadingQuote(false)
+          if (full && !priceS) setPriceS(decimal(full.price))
+        }} />
         {touched && errors.asset && <span className="text-[12px] text-loss">{errors.asset}</span>}
         {asset && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-tx3">
             <TypeBadge type={asset.type} />
-            <span>Cotação <span className="mono text-tx2">{brl(asset.price)}</span></span>
+            <span>Cotação <span className="mono text-tx2">{loadingQuote ? 'buscando…' : (quotes.get(asset.ticker)?.price ?? asset.price) != null ? brl((quotes.get(asset.ticker)?.price ?? asset.price)!) : '—'}</span></span>
             {pos && <span>Você tem {decimal(pos.qty, isCrypto ? 4 : 0)} {isCrypto ? asset.ticker : 'cotas'} · PM <span className="mono text-tx2">{brl(pos.avgPrice)}</span></span>}
           </div>
         )}

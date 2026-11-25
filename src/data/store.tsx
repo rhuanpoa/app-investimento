@@ -5,7 +5,7 @@
  * Cotações: vêm de quote_cache quando houver dados lá; enquanto a Edge Function de cotações
  * não existir, usa os valores de exemplo.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as mock from './mock'
 import { supabase } from '../lib/supabase'
 import type { Dividend, HelpItem, InvestorProfile, PriceAlert, Quote, Transaction } from './types'
@@ -88,13 +88,42 @@ async function fetchAll(): Promise<{ data: Data; quotes: Quote[] }> {
         youtubeId: r.youtube_id ?? undefined, body: r.body ?? undefined,
       })),
     },
-    quotes: (qc.data ?? []).map((r) => ({
-      ticker: r.ticker, name: r.name, type: r.type, price: +r.price, changeDay: +r.change_day,
-      pl: r.pl == null ? undefined : +r.pl, dy: r.dy == null ? undefined : +r.dy, pvp: r.pvp == null ? undefined : +r.pvp,
-      marketCap: r.market_cap == null ? undefined : +r.market_cap, history: (r.history as number[]) ?? [],
-    })),
+    quotes: (qc.data ?? []).map(mapQuote),
   }
 }
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function mapQuote(r: any): Quote {
+  const h = Array.isArray(r.history) ? r.history : []
+  return {
+    ticker: r.ticker, name: r.name, type: r.type, price: +r.price, changeDay: +r.change_day,
+    pl: r.pl == null ? undefined : +r.pl, dy: r.dy == null ? undefined : +r.dy, pvp: r.pvp == null ? undefined : +r.pvp,
+    marketCap: r.market_cap == null ? undefined : +r.market_cap, sourceId: r.source_id ?? undefined,
+    // histórico no banco: [["AAAA-MM-DD", fechamento], ...]
+    history: h.map((x: any) => (Array.isArray(x) ? +x[1] : +x)).filter((x: number) => Number.isFinite(x)),
+  }
+}
+
+async function loadMarket(): Promise<{ quotes: Quote[]; indices: MarketIndex[] }> {
+  const sb = supabase!
+  const [qc, ix] = await Promise.all([
+    sb.from('quote_cache').select('*'),
+    sb.from('market_indices').select('*').order('position'),
+  ])
+  return {
+    quotes: (qc.data ?? []).map(mapQuote),
+    indices: (ix.data ?? []).map((r: any) => ({ label: r.label, value: fmtIndex(r.label, +r.value), change: +r.change })),
+  }
+}
+
+function fmtIndex(label: string, v: number) {
+  if (label === 'USD/BRL') return v.toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+  if (label === 'BTC') return `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+export interface MarketIndex { label: string; value: string; change: number }
+export interface SearchResult { ticker: string; name: string; type: Quote['type']; sourceId?: string; price?: number }
 
 /* ---------- Contexto ---------- */
 
@@ -103,10 +132,14 @@ interface Ctx extends Data {
   ready: boolean
   /** true = sem Supabase (dados de exemplo no navegador) */
   demo: boolean
-  /** true = cotações de exemplo (quote_cache ainda vazio) */
-  demoQuotes: boolean
   quotes: Map<string, Quote>
-  catalog: Quote[]
+  indices: MarketIndex[]
+  quotesUpdatedAt: Date | null
+  quoteErrors: string[]
+  refreshQuotes: (assets?: SearchResult[]) => Promise<void>
+  searchAssets: (q: string) => Promise<SearchResult[]>
+  /** Garante que o ativo está no cache de cotações e devolve a cotação */
+  ensureQuote: (a: SearchResult) => Promise<Quote | null>
   login: (email: string, password: string) => Promise<string | null>
   logout: () => Promise<void>
   addTransaction: (tx: Transaction) => Promise<string | null>
@@ -126,13 +159,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ email: string } | null>(initial.user)
   const [data, setData] = useState<Data>(initial.data)
   const [dbQuotes, setDbQuotes] = useState<Quote[]>([])
+  const [indices, setIndices] = useState<MarketIndex[]>(demo ? mock.INDICES : [])
+  const [quotesUpdatedAt, setQuotesUpdatedAt] = useState<Date | null>(demo ? new Date() : null)
+  const [quoteErrors, setQuoteErrors] = useState<string[]>([])
   const [ready, setReady] = useState(demo)
+  const quotesRef = useRef<Map<string, Quote>>(new Map())
 
   // Persistência do modo demonstração
   useEffect(() => {
     if (!demo) return
     try { localStorage.setItem(KEY, JSON.stringify({ ...data, user })) } catch { /* ignora */ }
   }, [demo, data, user])
+
+  /** Chama a Edge Function (que respeita o cache) e recarrega cotações e índices */
+  const refreshQuotes = useCallback(async (assets: SearchResult[] = []) => {
+    if (!supabase) return
+    try {
+      const { data: res, error } = await supabase.functions.invoke('quotes', {
+        body: { action: 'refresh', assets: assets.map((a) => ({ ticker: a.ticker, type: a.type, name: a.name, sourceId: a.sourceId })) },
+      })
+      if (error) throw error
+      setQuoteErrors(res?.errors ?? [])
+    } catch (e) {
+      console.error('Falha ao atualizar cotações', e)
+      setQuoteErrors([msg(e)])
+    }
+    try {
+      const m = await loadMarket()
+      setDbQuotes(m.quotes)
+      setIndices(m.indices)
+      setQuotesUpdatedAt(new Date())
+    } catch (e) { console.error(e) }
+  }, [])
 
   const hydrate = useCallback(async () => {
     try {
@@ -142,7 +200,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('Falha ao carregar dados do Supabase', e)
     }
+    void refreshQuotes()
+  }, [refreshQuotes])
+
+  // Atualização periódica enquanto o app está aberto
+  const refreshSeconds = data.profile.refreshSeconds
+  useEffect(() => {
+    if (!supabase || !user) return
+    const ms = Math.max(60, refreshSeconds) * 1000
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void refreshQuotes() }, ms)
+    return () => clearInterval(t)
+  }, [user, refreshSeconds, refreshQuotes])
+
+  const searchAssets = useCallback(async (q: string): Promise<SearchResult[]> => {
+    const t = q.trim().toLowerCase()
+    if (!supabase) {
+      return mock.QUOTES.filter((x) => !t || x.ticker.toLowerCase().includes(t) || x.name.toLowerCase().includes(t))
+        .slice(0, 6).map((x) => ({ ticker: x.ticker, name: x.name, type: x.type, price: x.price }))
+    }
+    if (t.length < 2) {
+      return [...quotesRef.current.values()].slice(0, 6).map((x) => ({ ticker: x.ticker, name: x.name, type: x.type, sourceId: x.sourceId, price: x.price }))
+    }
+    const { data: res, error } = await supabase.functions.invoke('quotes', { body: { action: 'search', q } })
+    if (error) throw error
+    return res?.results ?? []
   }, [])
+
+  const ensureQuote = useCallback(async (a: SearchResult) => {
+    const have = quotesRef.current.get(a.ticker)
+    if (have || !supabase) return have ?? null
+    await refreshQuotes([a])
+    const m = await loadMarket()
+    return m.quotes.find((x) => x.ticker === a.ticker) ?? null
+  }, [refreshQuotes])
 
   // Sessão do Supabase
   useEffect(() => {
@@ -225,14 +315,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return null
   }, [])
 
-  const demoQuotes = dbQuotes.length === 0
-  const catalog = demoQuotes ? mock.QUOTES : dbQuotes
-  const quotes = useMemo(() => new Map(catalog.map((q) => [q.ticker, q])), [catalog])
+  const quotes = useMemo(() => new Map((demo ? mock.QUOTES : dbQuotes).map((q) => [q.ticker, q])), [demo, dbQuotes])
+  quotesRef.current = quotes
 
   const value = useMemo<Ctx>(() => ({
-    ...data, user, ready, demo, demoQuotes, quotes, catalog,
+    ...data, user, ready, demo, quotes, indices, quotesUpdatedAt, quoteErrors,
+    refreshQuotes, searchAssets, ensureQuote,
     login, logout, addTransaction, savePanel, addHelp,
-  }), [data, user, ready, demo, demoQuotes, quotes, catalog, login, logout, addTransaction, savePanel, addHelp])
+  }), [data, user, ready, demo, quotes, indices, quotesUpdatedAt, quoteErrors, refreshQuotes, searchAssets, ensureQuote,
+    login, logout, addTransaction, savePanel, addHelp])
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }

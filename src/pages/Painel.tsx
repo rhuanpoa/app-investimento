@@ -2,7 +2,8 @@ import { useMemo, useState, type DragEvent } from 'react'
 import { BellRing, Check, GripVertical, Plus, Save, TrendingUp, Trash2, X } from 'lucide-react'
 import { uid, useStore } from '../data/store'
 import { NEWS_SOURCES } from '../data/mock'
-import type { AlertKind, AssetType, InvestorProfile, PriceAlert, Quote, RiskProfile } from '../data/types'
+import type { AlertKind, AssetType, InvestorProfile, PriceAlert, RiskProfile } from '../data/types'
+import type { SearchResult } from '../data/store'
 import { ALERT_LABEL, alertTriggered, holdings, monthsToGoal, totals } from '../lib/calc'
 import { brl, decimal, parseBR, pct } from '../lib/format'
 import { Card, Delta, Field, PageHeader, SectionHead, Seg, Toggle, TYPE_META, TypeBadge } from '../components/ui'
@@ -29,14 +30,15 @@ function monthsText(m: number) {
 }
 
 function NovoAlerta({ onAdd, onCancel }: { onAdd: (a: PriceAlert) => void; onCancel: () => void }) {
-  const [asset, setAsset] = useState<Quote | null>(null)
+  const { ensureQuote } = useStore()
+  const [asset, setAsset] = useState<SearchResult | null>(null)
   const [kind, setKind] = useState<AlertKind>('preco_abaixo')
   const [val, setVal] = useState('')
   const v = parseBR(val)
   const ok = asset && v > 0
   return (
     <div className="flex flex-col gap-3 p-4 rounded-[10px] bg-s0 border border-line">
-      <AssetSearch label="Ativo" value={asset} onSelect={setAsset} />
+      <AssetSearch label="Ativo" value={asset} onSelect={(q) => { setAsset(q); void ensureQuote(q) }} />
       <div className="grid grid-cols-2 gap-3">
         <Field label="Condição">
           <span className="field-box">
@@ -66,7 +68,7 @@ function NovoAlerta({ onAdd, onCancel }: { onAdd: (a: PriceAlert) => void; onCan
 
 export default function Painel() {
   const store = useStore()
-  const { quotes, transactions, savePanel } = store
+  const { quotes, transactions, savePanel, ensureQuote } = store
   const [p, setP] = useState<InvestorProfile>(store.profile)
   const [goalS, setGoalS] = useState(decimal(store.profile.goal))
   const [monthlyS, setMonthlyS] = useState(decimal(store.profile.monthly))
@@ -225,11 +227,10 @@ export default function Painel() {
             <div className="flex flex-col gap-3">
               <SectionHead n={4} title="Ativos acompanhados" desc="Aparecem em Notícias e Mercado. Arraste para reordenar." />
               <AssetSearch label="Adicionar à lista" placeholder="Buscar ticker (ex.: VALE3)" exclude={watch}
-                onSelect={(q) => setWatch((w) => [...w, q.ticker])} />
+                onSelect={(q) => { setWatch((w) => [...w, q.ticker]); void ensureQuote(q) }} />
               <div>
                 {watch.map((t, i) => {
                   const q = quotes.get(t)
-                  if (!q) return null
                   return (
                     <div key={t} draggable onDragStart={() => setDragIdx(i)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDrop(e, i)}
                       className={`flex items-center gap-2 min-h-14 pl-1 border-t border-line ${dragIdx === i ? 'opacity-50' : ''}`}>
@@ -239,11 +240,11 @@ export default function Painel() {
                       </button>
                       <div className="flex items-center gap-2.5 flex-1 min-w-0">
                         <span className="mono text-[14px] font-semibold">{t}</span>
-                        <TypeBadge type={q.type} />
-                        <span className="text-[12px] text-tx3 truncate max-sm:hidden">{q.name}</span>
+                        {q && <TypeBadge type={q.type} />}
+                        <span className="text-[12px] text-tx3 truncate max-sm:hidden">{q?.name ?? 'buscando cotação…'}</span>
                       </div>
-                      <span className="w-[112px] text-right mono text-[13px] font-medium whitespace-nowrap">{brl(q.price)}</span>
-                      <span className="w-[72px] text-right"><Delta value={q.changeDay} /></span>
+                      <span className="w-[112px] text-right mono text-[13px] font-medium whitespace-nowrap">{q ? brl(q.price) : '—'}</span>
+                      <span className="w-[72px] text-right">{q && <Delta value={q.changeDay} />}</span>
                       <button type="button" className="btn-icon" aria-label={`Remover ${t}`} onClick={() => setWatch((w) => w.filter((x) => x !== t))}><Trash2 size={18} /></button>
                     </div>
                   )

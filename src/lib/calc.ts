@@ -57,7 +57,8 @@ export function allocation(rows: Holding[]): Record<AssetType, number> {
 /** Série do patrimônio (posição atual × fechamentos históricos) dos últimos `days` dias */
 export function portfolioSeries(rows: Holding[], quotes: Map<string, Quote>, days: number): number[] {
   if (!rows.length) return []
-  const len = Math.min(days, ...rows.map((r) => quotes.get(r.ticker)!.history.length))
+  const len = Math.min(days, ...rows.map((r) => quotes.get(r.ticker)?.history.length ?? 0))
+  if (len < 2) return []
   const out = new Array<number>(len).fill(0)
   for (const r of rows) {
     const h = quotes.get(r.ticker)!.history
@@ -79,7 +80,8 @@ function stats(xs: number[]) {
 export function projection7d(rows: Holding[], quotes: Map<string, Quote>) {
   let mid = 0, low = 0, high = 0
   for (const r of rows) {
-    const h = quotes.get(r.ticker)!.history.slice(-31)
+    const h = (quotes.get(r.ticker)?.history ?? []).slice(-31)
+    if (h.length < 3) { mid += r.value; low += r.value; high += r.value; continue }
     const rets = h.slice(1).map((p, i) => p / h[i] - 1)
     const { mean, sd } = stats(rets)
     const drift = mean * 7

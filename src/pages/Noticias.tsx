@@ -28,7 +28,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function WatchCard({ q, alert }: { q: Quote; alert?: string }) {
   const h30 = q.history.slice(-31)
-  const chg30 = (h30[h30.length - 1] / h30[0] - 1) * 100
+  const chg30 = h30.length >= 2 ? (h30[h30.length - 1] / h30[0] - 1) * 100 : 0
   const metrics = q.type === 'cripto'
     ? [['Market cap', q.marketCap ? brlCompact(q.marketCap) : '—'], ['Var. 24h', `${q.changeDay >= 0 ? '+' : '−'}${pct(Math.abs(q.changeDay))}`]]
     : q.type === 'fii'

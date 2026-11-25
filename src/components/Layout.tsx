@@ -1,6 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { CircleHelp, LogOut, Newspaper, SlidersHorizontal, Wallet, type LucideIcon } from 'lucide-react'
-import { INDICES } from '../data/mock'
 import { useStore } from '../data/store'
 import { Logo } from './ui'
 import { pctArrow, toneOf } from '../lib/format'
@@ -13,12 +12,15 @@ const NAV: { to: string; label: string; short: string; icon: LucideIcon }[] = [
 ]
 
 function TickerStrip() {
-  const items = [...INDICES, ...INDICES, ...INDICES, ...INDICES]
+  const { indices } = useStore()
+  if (!indices.length) return <div className="h-[34px] flex-none bg-s0 border-b border-line max-lg:hidden" aria-hidden="true" />
+  const reps = Math.max(2, Math.ceil(8 / indices.length) * 2)
+  const items = Array.from({ length: reps }, () => indices).flat()
   return (
     <div aria-label="Índices de mercado" className="h-[34px] flex-none bg-s0 border-b border-line overflow-hidden flex items-center max-lg:hidden">
       <div className="ticker-track">
         {items.map((it, i) => (
-          <span key={i} className="inline-flex items-center gap-2 mr-10 whitespace-nowrap" aria-hidden={i >= INDICES.length}>
+          <span key={i} className="inline-flex items-center gap-2 mr-10 whitespace-nowrap" aria-hidden={i >= indices.length}>
             <span className="mono text-[12px] font-semibold text-tx3 tracking-[.04em]">{it.label}</span>
             <span className="mono text-[12.5px] font-medium text-tx">{it.value}</span>
             <span className={`mono text-[12px] font-medium ${toneOf(it.change)}`}>{pctArrow(it.change)}</span>
@@ -34,14 +36,14 @@ function initials(email: string) {
 }
 
 export default function Layout() {
-  const { user, logout: signOut, demo, demoQuotes } = useStore()
+  const { user, logout: signOut, demo, quoteErrors } = useStore()
   const navigate = useNavigate()
   const email = user?.email ?? ''
   const logout = async () => { await signOut(); navigate('/login') }
   const notice = demo
     ? { title: 'Modo demonstração.', long: 'Dados de exemplo até ligar o Supabase e as cotações reais.', short: 'Dados de exemplo.' }
-    : demoQuotes
-      ? { title: 'Cotações de exemplo.', long: 'Seus dados já ficam no Supabase; os preços ainda são fictícios até ligarmos a fonte de cotações.', short: 'Preços ainda fictícios.' }
+    : quoteErrors.length
+      ? { title: 'Cotações incompletas.', long: `Alguns preços não foram atualizados (${quoteErrors.slice(0, 2).join('; ')}).`, short: 'Alguns preços não atualizaram.' }
       : null
 
   return (

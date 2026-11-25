@@ -12,6 +12,8 @@ export interface Quote {
   dy?: number
   pvp?: number
   marketCap?: number
+  /** id na CoinGecko (cripto) */
+  sourceId?: string
 }
 
 export interface Transaction {

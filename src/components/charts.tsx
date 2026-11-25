@@ -99,6 +99,7 @@ export function AllocationDonut({ current, target, size = 190 }: {
 /** Mini-gráfico de 30 dias */
 export function Sparkline({ data, height = 52 }: { data: number[]; height?: number }) {
   const gid = useId()
+  if (data.length < 2) return <div style={{ height }} className="flex items-center text-[11px] text-tx3">histórico em formação</div>
   const W = 300, H = height
   const min = Math.min(...data), max = Math.max(...data)
   const up = data[data.length - 1] >= data[0]
