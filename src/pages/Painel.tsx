@@ -8,6 +8,7 @@ import { ALERT_LABEL, alertTriggered, holdings, monthsToGoal, totals } from '../
 import { brl, decimal, parseBR, pct } from '../lib/format'
 import { Card, Delta, Field, PageHeader, SectionHead, Seg, Toggle, TYPE_META, TypeBadge } from '../components/ui'
 import AssetSearch from '../components/AssetSearch'
+import PushSetup from '../components/PushSetup'
 
 const RISKS: { value: RiskProfile; desc: string }[] = [
   { value: 'Conservador', desc: 'Prioriza estabilidade: mais peso em FIIs e ações pagadoras de dividendos, pouca cripto.' },
@@ -287,6 +288,7 @@ export default function Painel() {
                   )
                 })}
               </div>
+              <PushSetup />
             </div>
           </Card>
 

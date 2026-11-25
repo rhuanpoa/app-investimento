@@ -2,11 +2,16 @@
 // - action "search":  busca ativos na B3 (brapi /v2/tickers) e cripto (CoinGecko /search)
 // - action "refresh": atualiza quote_cache para os ativos pedidos, respeitando o cache,
 //                     e a faixa de índices (market_indices)
+// - action "push-key":  chave pública VAPID para o app se inscrever nas notificações
+// - action "push-test": envia uma notificação de teste para os aparelhos do usuário
+// - action "cron":      chamada pelo pg_cron (cabeçalho x-cron-secret) a cada 15 min:
+//                       atualiza os ativos com alerta, confere as condições e envia o push
 //
 // Segredos (Supabase → Edge Functions → Secrets):
 //   BRAPI_TOKEN      token da brapi.dev (sem ele só PETR4, VALE3, ITUB4, MGLU3, MXRF11, HGLG11 funcionam)
 //   COINGECKO_KEY    opcional (chave "demo" da CoinGecko)
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4'
+import webpush from 'npm:web-push@3.6.7'
 
 type AssetType = 'acao' | 'fii' | 'cripto'
 interface AssetReq { ticker: string; type: AssetType; name?: string; sourceId?: string }
@@ -220,50 +225,25 @@ async function refreshIndices(admin: ReturnType<typeof createClient>) {
   if (upserts.length) await admin.from('market_indices').upsert(upserts)
 }
 
-/* ---------------- handler ---------------- */
+/* ---------------- atualização de um conjunto de ativos ---------------- */
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
-  if (req.method !== 'POST') return json({ error: 'use POST' }, 405)
+type Admin = ReturnType<typeof createClient>
 
-  // Só usuário logado
-  const url = Deno.env.get('SUPABASE_URL')!
-  const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
-  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
-  const { data: auth } = await admin.auth.getUser(jwt)
-  if (!auth?.user) return json({ error: 'não autenticado' }, 401)
+/** B3 aberta (seg–sex, 10h–18h15 de Brasília = 13h–21h15 UTC) */
+function b3Open(d = new Date()) {
+  const wd = d.getUTCDay(), m = d.getUTCHours() * 60 + d.getUTCMinutes()
+  return wd >= 1 && wd <= 5 && m >= 13 * 60 && m <= 21 * 60 + 15
+}
 
-  let body: any = {}
-  try { body = await req.json() } catch { /* corpo vazio */ }
-
-  if (body.action === 'search') {
-    return json({ results: await search(String(body.q ?? '')) })
-  }
-
-  // refresh: ativos pedidos + os da carteira e da lista do usuário
-  const uid = auth.user.id
-  const [tx, wl] = await Promise.all([
-    admin.from('transactions').select('ticker').eq('user_id', uid),
-    admin.from('watchlist').select('ticker').eq('user_id', uid),
-  ])
-  const wanted = new Map<string, AssetReq>()
-  for (const a of (body.assets ?? []) as AssetReq[]) {
-    if (a?.ticker && ['acao', 'fii', 'cripto'].includes(a.type)) wanted.set(String(a.ticker).toUpperCase(), { ...a, ticker: String(a.ticker).toUpperCase() })
-  }
-  const owned = [...new Set([...(tx.data ?? []), ...(wl.data ?? [])].map((r: any) => r.ticker))]
-  const { data: cached } = await admin.from('quote_cache').select('*').in('ticker', [...new Set([...owned, ...wanted.keys()])])
-  const byTicker = new Map((cached ?? []).map((r: any) => [r.ticker, r]))
-  for (const t of owned) {
-    const r = byTicker.get(t)
-    if (!wanted.has(t) && r) wanted.set(t, { ticker: t, type: r.type, name: r.name, sourceId: r.source_id })
-  }
-
+async function refreshAssets(admin: Admin, wanted: Map<string, AssetReq>, byTicker: Map<string, any>, opts: { skipClosedB3?: boolean } = {}) {
   const errors: string[] = []
   const upserts: Record<string, unknown>[] = []
+  const open = b3Open()
 
   // B3: uma requisição por vez (plano gratuito permite 1 simultânea)
   for (const a of [...wanted.values()].filter((x) => x.type !== 'cripto')) {
     const row = byTicker.get(a.ticker)
+    if (opts.skipClosedB3 && !open && row) continue // pregão fechado: o preço não muda
     try {
       const patch = await refreshB3(a, row)
       if (Object.keys(patch).length) upserts.push({ ...(row ?? {}), ticker: a.ticker, type: row?.type ?? a.type, name: row?.name ?? a.name ?? a.ticker, ...patch })
@@ -284,8 +264,169 @@ Deno.serve(async (req) => {
     const { error } = await admin.from('quote_cache').upsert(valid)
     if (error) errors.push(`cache: ${error.message}`)
   }
+  for (const u of valid) byTicker.set(String(u.ticker), { ...(byTicker.get(String(u.ticker)) ?? {}), ...u })
+  return { updated: valid.map((u) => String(u.ticker)), errors }
+}
 
+/* ---------------- notificações (Web Push) ---------------- */
+
+async function secret(admin: Admin, key: string): Promise<string | null> {
+  const { data } = await admin.from('app_secrets').select('value').eq('key', key).maybeSingle()
+  return (data as any)?.value ?? null
+}
+
+/** Chaves VAPID: geradas na primeira vez e guardadas em app_secrets */
+async function vapidKeys(admin: Admin) {
+  let pub = await secret(admin, 'vapid_public')
+  let priv = await secret(admin, 'vapid_private')
+  if (!pub || !priv) {
+    const k = webpush.generateVAPIDKeys()
+    await admin.from('app_secrets').upsert(
+      [{ key: 'vapid_public', value: k.publicKey }, { key: 'vapid_private', value: k.privateKey }],
+      { onConflict: 'key', ignoreDuplicates: true },
+    )
+    pub = await secret(admin, 'vapid_public')
+    priv = await secret(admin, 'vapid_private')
+  }
+  return { pub: pub!, priv: priv! }
+}
+
+interface PushMsg { title: string; body: string; tag?: string; url?: string }
+
+/** Envia para todos os aparelhos do usuário; remove inscrições que expiraram */
+async function pushToUser(admin: Admin, userId: string, msg: PushMsg) {
+  const { pub, priv } = await vapidKeys(admin)
+  webpush.setVapidDetails('mailto:alertas@vertice.app', pub, priv)
+  const { data: subs } = await admin.from('push_subscriptions').select('*').eq('user_id', userId)
+  let sent = 0
+  const errors: string[] = []
+  for (const s of (subs ?? []) as any[]) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        JSON.stringify(msg),
+        { TTL: 6 * 3600, urgency: 'high' },
+      )
+      sent++
+    } catch (e: any) {
+      if (e?.statusCode === 404 || e?.statusCode === 410) await admin.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
+      else errors.push(`push ${e?.statusCode ?? ''} ${String(e?.body ?? e).slice(0, 160)}`)
+    }
+  }
+  return { sent, devices: subs?.length ?? 0, errors }
+}
+
+const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: v < 1 ? 6 : 2 })
+const dec = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const dayBR = (d: Date) => new Date(d.getTime() - 3 * 3600000).toISOString().slice(0, 10)
+const chg = (q: any) => { const c = Number(q.change_day ?? 0); return `${c >= 0 ? '+' : '−'}${dec(Math.abs(c))}% no dia` }
+
+function alertHit(a: any, q: any): PushMsg | null {
+  if (!q || q.price == null) return null
+  const price = Number(q.price), v = Number(a.value)
+  switch (a.kind) {
+    case 'preco_abaixo':
+      return price <= v ? { title: `${a.ticker} abaixo de ${brl(v)}`, body: `Agora em ${brl(price)} (${chg(q)}).` } : null
+    case 'preco_acima':
+      return price >= v ? { title: `${a.ticker} acima de ${brl(v)}`, body: `Agora em ${brl(price)} (${chg(q)}).` } : null
+    case 'dy_min':
+      return q.dy != null && Number(q.dy) >= v ? { title: `${a.ticker} com DY de ${dec(Number(q.dy))}%`, body: `Atingiu o seu alerta de DY ≥ ${dec(v)}%. Preço: ${brl(price)}.` } : null
+    case 'pvp_max':
+      return q.pvp != null && Number(q.pvp) <= v ? { title: `${a.ticker} com P/VP de ${dec(Number(q.pvp))}`, body: `Atingiu o seu alerta de P/VP ≤ ${dec(v)}. Preço: ${brl(price)}.` } : null
+  }
+  return null
+}
+
+/** Rodada do agendamento: atualiza os ativos com alerta e avisa (no máximo 1x por dia por alerta) */
+async function runAlerts(admin: Admin) {
+  const { data } = await admin.from('price_alerts').select('*').eq('active', true)
+  const alerts = (data ?? []) as any[]
+  if (!alerts.length) return { checked: 0, notified: 0, errors: [] as string[] }
+  const tickers = [...new Set(alerts.map((a) => a.ticker))]
+  const { data: cached } = await admin.from('quote_cache').select('*').in('ticker', tickers)
+  const byTicker = new Map((cached ?? []).map((r: any) => [r.ticker, r]))
+  const wanted = new Map<string, AssetReq>()
+  for (const t of tickers) {
+    const r = byTicker.get(t)
+    if (r) wanted.set(t, { ticker: t, type: r.type, name: r.name, sourceId: r.source_id })
+  }
+  const { errors } = await refreshAssets(admin, wanted, byTicker, { skipClosedB3: true })
+
+  const today = dayBR(new Date())
+  let notified = 0
+  for (const a of alerts) {
+    if (a.notified_at && dayBR(new Date(a.notified_at)) === today) continue
+    const msg = alertHit(a, byTicker.get(a.ticker))
+    if (!msg) continue
+    const r = await pushToUser(admin, a.user_id, { ...msg, tag: `alerta-${a.id}`, url: './#/noticias' })
+    errors.push(...r.errors)
+    if (r.sent) {
+      notified++
+      await admin.from('price_alerts').update({ notified_at: new Date().toISOString() }).eq('id', a.id)
+    }
+  }
+  return { checked: alerts.length, notified, errors }
+}
+
+/* ---------------- handler ---------------- */
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  if (req.method !== 'POST') return json({ error: 'use POST' }, 405)
+
+  const url = Deno.env.get('SUPABASE_URL')!
+  const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
+
+  let body: any = {}
+  try { body = await req.json() } catch { /* corpo vazio */ }
+
+  // Agendamento (pg_cron): autenticado pelo segredo guardado em app_secrets
+  const cronHeader = req.headers.get('x-cron-secret')
+  if (cronHeader) {
+    const expected = await secret(admin, 'cron_secret')
+    if (!expected || cronHeader !== expected) return json({ error: 'segredo inválido' }, 401)
+    const r = await runAlerts(admin)
+    if (r.errors.length) console.warn('alertas', r.errors)
+    return json(r)
+  }
+
+  // Demais ações: só usuário logado
+  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+  const { data: auth } = await admin.auth.getUser(jwt)
+  if (!auth?.user) return json({ error: 'não autenticado' }, 401)
+  const uid = auth.user.id
+
+  if (body.action === 'search') {
+    return json({ results: await search(String(body.q ?? '')) })
+  }
+
+  if (body.action === 'push-key') {
+    return json({ key: (await vapidKeys(admin)).pub })
+  }
+
+  if (body.action === 'push-test') {
+    return json(await pushToUser(admin, uid, { title: 'Vértice: notificações ativas', body: 'Os avisos dos seus alertas de preço vão chegar aqui.', tag: 'teste', url: './#/painel' }))
+  }
+
+  // refresh: ativos pedidos + os da carteira e da lista do usuário
+  const [tx, wl] = await Promise.all([
+    admin.from('transactions').select('ticker').eq('user_id', uid),
+    admin.from('watchlist').select('ticker').eq('user_id', uid),
+  ])
+  const wanted = new Map<string, AssetReq>()
+  for (const a of (body.assets ?? []) as AssetReq[]) {
+    if (a?.ticker && ['acao', 'fii', 'cripto'].includes(a.type)) wanted.set(String(a.ticker).toUpperCase(), { ...a, ticker: String(a.ticker).toUpperCase() })
+  }
+  const owned = [...new Set([...(tx.data ?? []), ...(wl.data ?? [])].map((r: any) => r.ticker))]
+  const { data: cached } = await admin.from('quote_cache').select('*').in('ticker', [...new Set([...owned, ...wanted.keys()])])
+  const byTicker = new Map((cached ?? []).map((r: any) => [r.ticker, r]))
+  for (const t of owned) {
+    const r = byTicker.get(t)
+    if (!wanted.has(t) && r) wanted.set(t, { ticker: t, type: r.type, name: r.name, sourceId: r.source_id })
+  }
+
+  const { updated, errors } = await refreshAssets(admin, wanted, byTicker)
   try { await refreshIndices(admin) } catch (e) { errors.push(`índices: ${String(e)}`) }
 
-  return json({ updated: valid.map((u) => u.ticker), errors })
+  return json({ updated, errors })
 })

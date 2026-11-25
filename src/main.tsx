@@ -36,6 +36,11 @@ function App() {
   )
 }
 
+// Service worker (notificações no celular). Só no site publicado.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {})
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <StoreProvider>
