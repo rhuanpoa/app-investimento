@@ -119,18 +119,28 @@ async function refreshB3(a: AssetReq, row: any) {
     }
   }
 
-  // Múltiplos (P/L, DY, P/VP): uma vez por dia; pode não estar no plano gratuito
+  // P/L e DY: uma vez por dia. O endpoint de múltiplos (v2/statistics) é pago; no plano gratuito
+  // usamos a cotação v1 com fundamental=true (P/L) e dividends=true (proventos de até 1 ano),
+  // e calculamos o DY = proventos com data-com nos últimos 12 meses ÷ preço atual.
+  // Ticker fracionário (final F) usa o papel principal (BBAS3F → BBAS3).
   if (!row?.fundamentals_at || now - new Date(row.fundamentals_at).getTime() > FUND_TTL) {
+    const base = /\dF$/.test(a.ticker) ? a.ticker.slice(0, -1) : a.ticker
     try {
-      const s = await brapi(`/v2/stocks/statistics?symbols=${encodeURIComponent(a.ticker)}&mode=current`)
-      const d = s?.results?.[0]?.data ?? s?.results?.[0] ?? {}
-      const st = Array.isArray(d) ? d[0] ?? {} : d
-      patch.pl = num(st.trailingPE ?? st.priceEarnings)
-      const dy = num(st.dividendYield)
-      patch.dy = dy == null ? null : dy < 1 ? dy * 100 : dy // a brapi devolve fração (0,03 = 3%)
-      patch.pvp = num(st.priceToBook)
+      const r = await brapi(`/quote/${encodeURIComponent(base)}?fundamental=true&dividends=true`)
+      const d = r?.results?.[0] ?? {}
+      patch.pl = num(d.priceEarnings)
+      const price = num(patch.price) ?? num(row?.price) ?? num(d.regularMarketPrice)
+      const cutoff = Date.now() - 365 * 86400000
+      const cash: any[] = d.dividendsData?.cashDividends ?? []
+      const sum = cash
+        .filter((c) => {
+          const when = c.lastDatePrior ?? c.paymentDate
+          return when && new Date(when).getTime() >= cutoff && new Date(when).getTime() <= Date.now()
+        })
+        .reduce((s, c) => s + (Number(c.rate) || 0), 0)
+      patch.dy = price && cash.length ? (sum / price) * 100 : null
     } catch (e) {
-      console.warn('múltiplos', a.ticker, String(e))
+      console.warn('fundamentos', base, String(e))
     }
     patch.fundamentals_at = new Date().toISOString()
   }

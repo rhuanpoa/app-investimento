@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { CircleHelp, LogOut, Newspaper, SlidersHorizontal, Wallet, type LucideIcon } from 'lucide-react'
+import { NavLink, Outlet } from 'react-router-dom'
+import { CircleHelp, Newspaper, SlidersHorizontal, Wallet, type LucideIcon } from 'lucide-react'
+import UserMenu from './UserMenu'
 import { useStore } from '../data/store'
 import { Logo } from './ui'
 import { pctArrow, toneOf } from '../lib/format'
@@ -31,15 +32,8 @@ function TickerStrip() {
   )
 }
 
-function initials(email: string) {
-  return (email.split('@')[0].replace(/[^a-z]/gi, '').slice(0, 2) || 'IV').toUpperCase()
-}
-
 export default function Layout() {
-  const { user, logout: signOut, demo, quoteErrors } = useStore()
-  const navigate = useNavigate()
-  const email = user?.email ?? ''
-  const logout = async () => { await signOut(); navigate('/login') }
+  const { demo, quoteErrors } = useStore()
   const notice = demo
     ? { title: 'Modo demonstração.', long: 'Dados de exemplo até ligar o Supabase e as cotações reais.', short: 'Dados de exemplo.' }
     : quoteErrors.length
@@ -53,12 +47,7 @@ export default function Layout() {
       {/* Cabeçalho do celular */}
       <header className="lg:hidden sticky top-0 z-30 h-14 flex-none flex items-center justify-between pl-4 pr-2 bg-s0 border-b border-line">
         <Logo />
-        <div className="flex items-center">
-          <span className="w-[34px] h-[34px] rounded-full bg-s3 border border-line-strong inline-flex items-center justify-center">
-            <span className="mono text-[12px] font-semibold">{initials(email)}</span>
-          </span>
-          <button type="button" className="btn-icon" aria-label="Sair" onClick={logout}><LogOut size={18} /></button>
-        </div>
+        <UserMenu compact />
       </header>
 
       <div className="flex flex-1">
@@ -79,15 +68,8 @@ export default function Layout() {
               <span className="font-semibold text-accent">{notice.title}</span> {notice.long}
             </div>
           )}
-          <div className="flex items-center gap-2.5 pt-3.5 px-1 border-t border-line">
-            <span className="w-9 h-9 rounded-full bg-s3 border border-line-strong inline-flex items-center justify-center flex-none">
-              <span className="mono text-[12px] font-semibold">{initials(email)}</span>
-            </span>
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-[13px] font-semibold">Investidor</span>
-              <span className="text-[12px] text-tx3 overflow-hidden text-ellipsis whitespace-nowrap">{email}</span>
-            </div>
-            <button type="button" className="btn-icon" aria-label="Sair" onClick={logout}><LogOut size={18} /></button>
+          <div className="pt-2 border-t border-line">
+            <UserMenu />
           </div>
         </aside>
 
