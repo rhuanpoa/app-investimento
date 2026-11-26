@@ -64,8 +64,8 @@ export default function Ajuda() {
     <>
       <section className="hero flex flex-wrap items-center gap-8 px-5 py-6 rounded-[24px] lg:rounded-[32px] lg:px-12 lg:py-12">
         <div aria-hidden="true" className="hero-grid max-lg:hidden" />
-        <div aria-hidden="true" className="bl bA w-[240px] h-[200px] -right-[70px] -top-[90px] lg:w-[420px] lg:h-[360px] lg:-right-20 lg:-top-[120px]" style={{ background: 'rgba(245,184,61,.28)' }} />
-        <div aria-hidden="true" className="bl bB w-[220px] h-[180px] -left-[60px] -bottom-[110px] lg:w-[380px] lg:h-[300px] lg:left-[30%] lg:-bottom-[200px]" style={{ background: 'rgba(46,189,133,.18)' }} />
+        <div aria-hidden="true" className="bl bA w-[240px] h-[200px] -right-[70px] -top-[90px] lg:w-[420px] lg:h-[360px] lg:-right-20 lg:-top-[120px]" style={{ '--c': 'rgba(245,184,61,.28)' } as React.CSSProperties} />
+        <div aria-hidden="true" className="bl bB w-[220px] h-[180px] -left-[60px] -bottom-[110px] lg:w-[380px] lg:h-[300px] lg:left-[30%] lg:-bottom-[200px]" style={{ '--c': 'rgba(46,189,133,.18)' } as React.CSSProperties} />
 
         <div className="relative flex-[1_1_480px] min-w-0 flex flex-col gap-4 lg:gap-[22px]">
           <h1 className="hi m-0 text-[32px] leading-[1.06] lg:text-[56px] lg:leading-[1.02] tracking-[-.04em] text-[#F4F6F9]" style={d(220)}>

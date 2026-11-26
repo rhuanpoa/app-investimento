@@ -72,10 +72,7 @@ export function Ambient() {
   return (
     <>
       <div className="vxa" aria-hidden="true"><i className="a" /><i className="b" /><i className="c" /></div>
-      <svg className="vxg" aria-hidden="true">
-        <filter id="vxn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves={2} stitchTiles="stitch" /><feColorMatrix type="saturate" values="0" /></filter>
-        <rect width="100%" height="100%" filter="url(#vxn)" />
-      </svg>
+      <div className="vxg" aria-hidden="true" />
     </>
   )
 }
@@ -95,8 +92,8 @@ export function Hero({ pill, title, highlight, subtitle, actions, visual, mobile
   return (
     <section className="hero flex flex-wrap items-center gap-8 px-5 py-6 rounded-[24px] lg:rounded-[30px] lg:px-12 lg:py-11">
       <div aria-hidden="true" className="hero-grid max-lg:hidden" />
-      <div aria-hidden="true" className="bl bA w-[240px] h-[200px] -right-[70px] -top-[90px] lg:w-[420px] lg:h-[340px] lg:-right-20 lg:-top-[120px]" style={{ background: 'rgba(245,184,61,.26)' }} />
-      <div aria-hidden="true" className="bl bB w-[220px] h-[180px] -left-[60px] -bottom-[110px] lg:w-[360px] lg:h-[280px] lg:left-[35%] lg:-bottom-[200px]" style={{ background: 'rgba(46,189,133,.16)' }} />
+      <div aria-hidden="true" className="bl bA w-[240px] h-[200px] -right-[70px] -top-[90px] lg:w-[420px] lg:h-[340px] lg:-right-20 lg:-top-[120px]" style={{ '--c': 'rgba(245,184,61,.26)' } as React.CSSProperties} />
+      <div aria-hidden="true" className="bl bB w-[220px] h-[180px] -left-[60px] -bottom-[110px] lg:w-[360px] lg:h-[280px] lg:left-[35%] lg:-bottom-[200px]" style={{ '--c': 'rgba(46,189,133,.16)' } as React.CSSProperties} />
       <div className="relative flex-[1_1_420px] min-w-0 flex flex-col items-start gap-3.5 lg:gap-5">
         <div className="hi" style={{ '--d': '100ms' } as React.CSSProperties}><span className="pill"><span className="pd" />{pill}</span></div>
         <h1 className="hi m-0 text-[32px] leading-[1.06] lg:text-[52px] lg:leading-[1.04] tracking-[-.04em] text-[#F4F6F9]" style={{ '--d': '200ms' } as React.CSSProperties}>
