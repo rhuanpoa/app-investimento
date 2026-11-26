@@ -14,11 +14,12 @@ const NAV: { to: string; label: string; short: string; icon: LucideIcon }[] = [
 
 function TickerStrip() {
   const { indices } = useStore()
-  if (!indices.length) return <div className="relative z-10 h-[34px] flex-none glass-bar border-b border-line max-lg:hidden" aria-hidden="true" />
+  if (!indices.length) return <div className="sticky top-0 z-20 h-[34px] flex-none glass-bar border-b border-line max-lg:hidden" aria-hidden="true" />
   const reps = Math.max(2, Math.ceil(8 / indices.length) * 2)
   const items = Array.from({ length: reps }, () => indices).flat()
   return (
-    <div aria-label="Índices de mercado" className="relative z-10 h-[34px] flex-none glass-bar border-b border-line overflow-hidden flex items-center ticker-mask max-lg:hidden">
+    <div aria-label="Índices de mercado" className="sticky top-0 z-20 h-[34px] flex-none glass-bar border-b border-line overflow-hidden flex items-center max-lg:hidden">
+      <div className="ticker-mask w-full h-full overflow-hidden flex items-center">
       <div className="ticker-track">
         {items.map((it, i) => (
           <span key={i} className="inline-flex items-center gap-2 mr-10 whitespace-nowrap" aria-hidden={i >= indices.length}>
@@ -27,6 +28,7 @@ function TickerStrip() {
             <span className={`mono text-[12px] font-medium ${toneOf(it.change)}`}>{pctArrow(it.change)}</span>
           </span>
         ))}
+      </div>
       </div>
     </div>
   )
@@ -53,7 +55,7 @@ export default function Layout() {
 
       <div className="relative z-[1] flex flex-1">
         {/* Menu lateral (desktop) */}
-        <aside className="max-lg:hidden sticky top-0 h-screen flex-[0_0_232px] w-[232px] glass-bar border-r border-line flex flex-col pt-[18px] px-3 pb-4">
+        <aside className="max-lg:hidden sticky top-[34px] h-[calc(100dvh-34px)] flex-[0_0_232px] w-[232px] glass-bar border-r border-line flex flex-col pt-[18px] px-3 pb-4">
           <div className="pt-1 px-2 pb-[22px]"><Logo /></div>
           <nav aria-label="Navegação principal" className="flex flex-col gap-1">
             {NAV.map(({ to, label, icon: Icon }) => (
