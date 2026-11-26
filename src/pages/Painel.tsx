@@ -1,5 +1,5 @@
 import { useMemo, useState, type DragEvent } from 'react'
-import { BellRing, Check, GripVertical, Plus, Save, TrendingUp, Trash2, X } from 'lucide-react'
+import { BellRing, Check, ChevronDown, ChevronUp, GripVertical, Plus, Save, TrendingUp, Trash2, X } from 'lucide-react'
 import { uid, useStore } from '../data/store'
 import { NEWS_SOURCES } from '../data/mock'
 import type { AlertKind, AssetType, InvestorProfile, PriceAlert, RiskProfile } from '../data/types'
@@ -15,6 +15,8 @@ const RISKS: { value: RiskProfile; desc: string }[] = [
   { value: 'Moderado', desc: 'Equilíbrio entre renda e crescimento, com cripto em uma fatia pequena.' },
   { value: 'Arrojado', desc: 'Aceita oscilações fortes em busca de retorno: mais peso em ações e cripto.' },
 ]
+
+const WATCH_PREVIEW = 3
 
 function alertValue(a: PriceAlert) {
   if (a.kind === 'dy_min') return pct(a.value, 0)
@@ -77,6 +79,7 @@ export default function Painel() {
   const [alerts, setAlerts] = useState<PriceAlert[]>(store.alerts)
   const [adding, setAdding] = useState(false)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [showAllWatch, setShowAllWatch] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const patrimony = useMemo(() => totals(holdings(transactions, quotes)).value, [transactions, quotes])
@@ -257,9 +260,9 @@ export default function Painel() {
             <div className="flex flex-col gap-3">
               <SectionHead n={4} title="Ativos acompanhados" desc="Aparecem em Notícias e Mercado. Arraste para reordenar." />
               <AssetSearch label="Adicionar à lista" placeholder="Buscar ticker (ex.: VALE3)" exclude={watch}
-                onSelect={(q) => { setWatch((w) => [...w, q.ticker]); void ensureQuote(q) }} />
+                onSelect={(q) => { setWatch((w) => [...w, q.ticker]); if (watch.length >= WATCH_PREVIEW) setShowAllWatch(true); void ensureQuote(q) }} />
               <div>
-                {watch.map((t, i) => {
+                {(showAllWatch ? watch : watch.slice(0, WATCH_PREVIEW)).map((t, i) => {
                   const q = quotes.get(t)
                   return (
                     <div key={t} draggable onDragStart={() => setDragIdx(i)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDrop(e, i)}
@@ -281,6 +284,11 @@ export default function Painel() {
                 })}
                 {!watch.length && <p className="text-[13px] text-tx3 m-0 py-4 border-t border-line">Nenhum ativo na lista.</p>}
               </div>
+              {watch.length > WATCH_PREVIEW && (
+                <button type="button" className="btn btn-secondary self-center" aria-expanded={showAllWatch} onClick={() => setShowAllWatch((v) => !v)}>
+                  {showAllWatch ? <><ChevronUp size={17} />Mostrar menos</> : <><ChevronDown size={17} />Ver todos ({watch.length})</>}
+                </button>
+              )}
             </div>
           </Card>
 
