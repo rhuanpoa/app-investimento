@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BellRing } from 'lucide-react'
+import { BellRing, ChevronDown, ChevronUp } from 'lucide-react'
 import { useStore } from '../data/store'
 import { NEWS, NEWS_SOURCES } from '../data/mock'
 import type { PriceAlert, Quote } from '../data/types'
@@ -16,6 +16,8 @@ function firedText(a: PriceAlert, q: Quote) {
     default: return `Preço ${brl(q.price)} ${ALERT_LABEL[a.kind].verb} ${brl(a.value)}`
   }
 }
+
+const PREVIEW = 3
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -75,6 +77,8 @@ function WatchCard({ q, alert }: { q: Quote; alert?: string }) {
 export default function Noticias() {
   const { watchlist, quotes, alerts, profile } = useStore()
   const [only, setOnly] = useState<'todas' | 'meus'>('todas')
+  const [showAll, setShowAll] = useState(false)
+  const watched = watchlist.map((t) => quotes.get(t)).filter((q): q is Quote => !!q)
 
   const fired = useMemo(() => {
     const m = new Map<string, string>()
@@ -127,9 +131,16 @@ export default function Noticias() {
             {fired.size > 0 && <span className="text-[12px] text-tx3">{fired.size} {fired.size === 1 ? 'alerta disparado' : 'alertas disparados'} hoje</span>}
           </div>
           {watchlist.length ? (
-            <div className="grid gap-4 items-start grid-cols-[repeat(auto-fit,minmax(min(300px,100%),1fr))]">
-              {watchlist.map((t) => quotes.get(t)).filter(Boolean).map((q) => <WatchCard key={q!.ticker} q={q!} alert={fired.get(q!.ticker)} />)}
-            </div>
+            <>
+              <div className="grid gap-4 items-start grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))]">
+                {(showAll ? watched : watched.slice(0, PREVIEW)).map((q) => <WatchCard key={q.ticker} q={q} alert={fired.get(q.ticker)} />)}
+              </div>
+              {watched.length > PREVIEW && (
+                <button type="button" className="btn btn-secondary self-center" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)}>
+                  {showAll ? <><ChevronUp size={17} />Mostrar menos</> : <><ChevronDown size={17} />Ver todos ({watched.length})</>}
+                </button>
+              )}
+            </>
           ) : (
             <Card className="p-6 text-[14px] text-tx2">Sua lista está vazia. Adicione ativos no <Link to="/painel" className="text-accent font-semibold">Painel do Investidor</Link>.</Card>
           )}
