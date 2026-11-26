@@ -1,11 +1,18 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
-import { Logo } from '../components/ui'
+import { BellRing, ChartPie, Eye, EyeOff, Lock, Mail, Newspaper } from 'lucide-react'
+import { Ambient, Logo } from '../components/ui'
 import { useStore } from '../data/store'
+import { pctArrow, toneOf } from '../lib/format'
+
+const FEATURES = [
+  { icon: ChartPie, text: 'Lucro e prejuízo de cada ativo da sua carteira' },
+  { icon: BellRing, text: 'Metas de alocação e alertas de preço' },
+  { icon: Newspaper, text: 'Notícias dos ativos que você acompanha' },
+]
 
 export default function Login() {
-  const { login, demo } = useStore()
+  const { login, demo, indices } = useStore()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -24,18 +31,51 @@ export default function Login() {
     navigate('/carteira')
   }
 
+  const chips = indices.filter((i) => ['IBOV', 'BTC', 'IFIX'].includes(i.label))
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-bg flex items-center justify-center px-6 py-12">
-      <svg aria-hidden="true" viewBox="0 0 1440 360" preserveAspectRatio="none" width="100%" height="360" className="absolute inset-x-0 bottom-0 opacity-55">
-        {[40, 120, 200, 280].map((y) => <line key={y} x1="0" x2="1440" y1={y} y2={y} stroke="#242B34" strokeOpacity=".5" />)}
+    <div className="relative min-h-screen overflow-hidden bg-bg isolate flex flex-wrap items-center justify-center gap-[72px] px-6 py-12 lg:px-14">
+      <Ambient />
+      <svg aria-hidden="true" viewBox="0 0 1440 360" preserveAspectRatio="none" width="100%" height="360" className="absolute inset-x-0 bottom-0 opacity-55 -z-[1]">
+        {[40, 120, 200, 280].map((y) => <line key={y} x1="0" x2="1440" y1={y} y2={y} stroke="rgba(255,255,255,.06)" />)}
         <path d="M0 226 L98 284 L146 320 L244 277 L390 300 L488 251 L634 266 L732 211 L829 143 L927 117 L976 169 L1098 152 L1195 101 L1293 80 L1342 101 L1440 80"
-          fill="none" stroke="#313A45" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+          fill="none" stroke="rgba(255,255,255,.15)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="relative w-[400px] max-w-full lg:bg-s1 lg:border lg:border-line lg:rounded-[14px] lg:pt-9 lg:px-8 lg:pb-8 flex flex-col gap-7 lg:shadow-[0_24px_80px_rgba(0,0,0,.45)]">
+
+      {/* Apresentação (desktop) */}
+      <div className="hi relative flex-[0_1_540px] min-w-[300px] flex-col items-start gap-7 hidden lg:flex" style={{ '--d': '100ms' } as React.CSSProperties}>
+        <span className="pill"><span className="pd" />Cotações da B3 com atraso de até 30 min</span>
+        <div className="font-[family-name:var(--font-display)] text-[60px] leading-[1.02] font-bold tracking-[-.045em] text-[#F4F6F9]">
+          Sua carteira, suas metas e o <span className="gt">mercado</span> num só lugar
+        </div>
+        <div className="flex flex-col gap-3.5">
+          {FEATURES.map(({ icon: Icon, text }) => (
+            <div key={text} className="flex items-center gap-3.5">
+              <span className="w-10 h-10 rounded-xl inline-flex items-center justify-center text-accent" style={{ background: 'rgba(245,184,61,.1)', border: '1px solid rgba(245,184,61,.3)' }}>
+                <Icon size={19} strokeWidth={1.75} aria-hidden="true" />
+              </span>
+              <span className="text-[15px] text-[#C3CCD6]">{text}</span>
+            </div>
+          ))}
+        </div>
+        {chips.length > 0 && (
+          <div className="flex flex-wrap gap-2.5">
+            {chips.map((c, i) => (
+              <span key={c.label} className="hc fl" style={{ animationDuration: `${5 + i}s`, animationDelay: `-${i * 1.5}s` }}>
+                <span className="mono text-[12.5px] font-semibold text-tx3">{c.label}</span>
+                <span className={`mono text-[12.5px] font-semibold ${toneOf(c.change)}`}>{pctArrow(c.change)}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Formulário */}
+      <div className="hi relative w-[400px] max-w-full card-lg lg:pt-9 lg:px-8 lg:pb-8 flex flex-col gap-7" style={{ '--d': '250ms' } as React.CSSProperties}>
         <div className="flex flex-col gap-[18px]">
           <Logo />
           <div>
-            <h1 className="m-0 text-[22px] max-lg:text-[24px] font-semibold tracking-[-.01em]">Acesse sua carteira</h1>
+            <h1 className="m-0 text-[24px] font-semibold tracking-[-.02em]">Acesse sua <span className="gt">carteira</span></h1>
             <p className="mt-1.5 mb-0 text-[14px] text-tx2">Entre com o e-mail e a senha do seu perfil.</p>
           </div>
         </div>

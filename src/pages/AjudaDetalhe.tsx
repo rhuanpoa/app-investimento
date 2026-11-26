@@ -31,7 +31,7 @@ export default function AjudaDetalhe() {
       <div className="flex flex-wrap gap-6 items-start">
         <article className="flex-[2_1_560px] min-w-0 flex flex-col gap-5">
           {item.youtubeId ? (
-            <div className="relative w-full aspect-video rounded-[10px] overflow-hidden border border-line bg-s2">
+            <div className="relative w-full aspect-video rounded-[18px] overflow-hidden border border-line bg-s2 shadow-[0_30px_80px_-30px_rgba(0,0,0,.9)]">
               <iframe className="absolute inset-0 w-full h-full" src={`https://www.youtube-nocookie.com/embed/${item.youtubeId}`}
                 title={item.title} allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
             </div>

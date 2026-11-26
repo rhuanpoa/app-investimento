@@ -6,7 +6,7 @@ import { NEWS, NEWS_SOURCES } from '../data/mock'
 import type { PriceAlert, Quote } from '../data/types'
 import { alertTriggered, ALERT_LABEL } from '../lib/calc'
 import { brl, brlCompact, decimal, pct, pctArrow, timeAgo, toneOf } from '../lib/format'
-import { AssetAvatar, Card, Delta, PageHeader, Seg, TypeBadge } from '../components/ui'
+import { AssetAvatar, Card, Delta, Hero, Seg, TypeBadge } from '../components/ui'
 import { Sparkline } from '../components/charts'
 
 function firedText(a: PriceAlert, q: Quote) {
@@ -91,7 +91,35 @@ export default function Noticias() {
 
   return (
     <>
-      <PageHeader title="Notícias e Mercado" subtitle="Indicadores da sua lista e o que está movendo o mercado" />
+      <Hero
+        pill="Mercado em movimento"
+        title="Notícias e" highlight="Mercado"
+        subtitle="Indicadores da sua lista e o que está movendo o mercado"
+        mobileExtra={fired.size > 0 ? <span className="hc" style={{ borderColor: 'rgba(245,184,61,.55)' }}><BellRing size={15} className="text-accent" /><span className="text-[12px] font-semibold text-tx">{fired.size} {fired.size === 1 ? 'alerta disparado' : 'alertas disparados'} hoje</span></span> : undefined}
+        visual={
+          <>
+            <div className="hg fl absolute left-0 right-5 top-9 rounded-[26px] px-[22px] pt-5 pb-2.5">
+              <span className="label-caps text-tx2 block mb-2.5">Sua lista hoje</span>
+              {watchlist.slice(0, 4).map((t) => {
+                const q = quotes.get(t)
+                return (
+                  <div key={t} className="flex items-center justify-between py-[9px] border-t border-[rgba(255,255,255,.08)]">
+                    <span className="mono text-[13px] font-semibold text-tx">{t}</span>
+                    {q ? <span className={`mono text-[13px] font-semibold ${toneOf(q.changeDay)}`}>{pctArrow(q.changeDay)}</span> : <span className="mono text-[13px] text-tx3">—</span>}
+                  </div>
+                )
+              })}
+              {!watchlist.length && <div className="py-3 text-[13px] text-tx3 border-t border-[rgba(255,255,255,.08)]">Adicione ativos no Painel</div>}
+            </div>
+            {fired.size > 0 && (
+              <div className="hc fl absolute right-0 top-0" style={{ animationDuration: '5s', animationDelay: '-2s', borderColor: 'rgba(245,184,61,.55)' }}>
+                <BellRing size={15} className="text-accent" />
+                <span className="text-[12.5px] font-semibold text-tx">{fired.size} {fired.size === 1 ? 'alerta disparado' : 'alertas disparados'} hoje</span>
+              </div>
+            )}
+          </>
+        }
+      />
       <div className="flex flex-wrap gap-5 items-start">
         <section className="flex-[3_1_560px] min-w-0 flex flex-col gap-3.5" aria-label="Ativos acompanhados">
           <div className="flex items-center justify-between">

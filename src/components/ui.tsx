@@ -67,6 +67,54 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   )
 }
 
+/** Fundo do app: aurora em movimento + grão */
+export function Ambient() {
+  return (
+    <>
+      <div className="vxa" aria-hidden="true"><i className="a" /><i className="b" /><i className="c" /></div>
+      <svg className="vxg" aria-hidden="true">
+        <filter id="vxn"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves={2} stitchTiles="stitch" /><feColorMatrix type="saturate" values="0" /></filter>
+        <rect width="100%" height="100%" filter="url(#vxn)" />
+      </svg>
+    </>
+  )
+}
+
+/** Bloco de destaque do topo das páginas (design v2) */
+export function Hero({ pill, title, highlight, subtitle, actions, visual, mobileExtra }: {
+  pill: ReactNode
+  title: string
+  highlight: string
+  subtitle?: ReactNode
+  actions?: ReactNode
+  /** Ilustração da direita (só no desktop) */
+  visual?: ReactNode
+  /** Destaque extra que aparece só no celular */
+  mobileExtra?: ReactNode
+}) {
+  return (
+    <section className="hero flex flex-wrap items-center gap-8 px-5 py-6 rounded-[24px] lg:rounded-[30px] lg:px-12 lg:py-11">
+      <div aria-hidden="true" className="hero-grid max-lg:hidden" />
+      <div aria-hidden="true" className="bl bA w-[240px] h-[200px] -right-[70px] -top-[90px] lg:w-[420px] lg:h-[340px] lg:-right-20 lg:-top-[120px]" style={{ background: 'rgba(245,184,61,.26)' }} />
+      <div aria-hidden="true" className="bl bB w-[220px] h-[180px] -left-[60px] -bottom-[110px] lg:w-[360px] lg:h-[280px] lg:left-[35%] lg:-bottom-[200px]" style={{ background: 'rgba(46,189,133,.16)' }} />
+      <div className="relative flex-[1_1_420px] min-w-0 flex flex-col items-start gap-3.5 lg:gap-5">
+        <div className="hi" style={{ '--d': '100ms' } as React.CSSProperties}><span className="pill"><span className="pd" />{pill}</span></div>
+        <h1 className="hi m-0 text-[32px] leading-[1.06] lg:text-[52px] lg:leading-[1.04] tracking-[-.04em] text-[#F4F6F9]" style={{ '--d': '200ms' } as React.CSSProperties}>
+          {title} <span className="gt">{highlight}</span>
+        </h1>
+        {subtitle && <p className="hi m-0 max-w-[480px] text-[14px] lg:text-[16px] leading-[1.6] text-tx2" style={{ '--d': '300ms' } as React.CSSProperties}>{subtitle}</p>}
+        {mobileExtra && <div className="hi lg:hidden" style={{ '--d': '360ms' } as React.CSSProperties}>{mobileExtra}</div>}
+        {actions && <div className="hi flex flex-wrap gap-3 max-lg:w-full" style={{ '--d': '400ms' } as React.CSSProperties}>{actions}</div>}
+      </div>
+      {visual && (
+        <div aria-hidden="true" className="hi relative flex-[0_1_380px] min-w-[300px] h-[300px] max-lg:hidden" style={{ '--d': '350ms' } as React.CSSProperties}>
+          {visual}
+        </div>
+      )}
+    </section>
+  )
+}
+
 /** Cabeçalho numerado das seções do Painel */
 export function SectionHead({ n, title, desc, action }: { n: number; title: string; desc?: string; action?: ReactNode }) {
   return (

@@ -6,7 +6,7 @@ import type { AlertKind, AssetType, InvestorProfile, PriceAlert, RiskProfile } f
 import type { SearchResult } from '../data/store'
 import { ALERT_LABEL, alertTriggered, holdings, monthsToGoal, totals } from '../lib/calc'
 import { brl, decimal, parseBR, pct } from '../lib/format'
-import { Card, Delta, Field, PageHeader, SectionHead, Seg, Toggle, TYPE_META, TypeBadge } from '../components/ui'
+import { Card, Delta, Field, Hero, SectionHead, Seg, Toggle, TYPE_META, TypeBadge } from '../components/ui'
 import AssetSearch from '../components/AssetSearch'
 import PushSetup from '../components/PushSetup'
 
@@ -122,13 +122,42 @@ export default function Painel() {
 
   return (
     <>
-      <PageHeader
-        title="Painel do Investidor"
+      <Hero
+        pill="Seu plano, sob controle"
+        title="Painel do" highlight="Investidor"
         subtitle="Perfil, metas, lista de acompanhamento e alertas"
-        action={
+        actions={
           <button type="button" className="btn btn-primary max-lg:w-full max-lg:h-12" onClick={save} disabled={sum !== 100 || (!dirty && !saved)}>
             {saved ? <Check size={18} /> : <Save size={18} />}{saved ? 'Salvo' : 'Salvar alterações'}
           </button>
+        }
+        mobileExtra={<span className="hc"><span className="mono text-[12px] font-semibold text-tx">{pct(progress, 1)} da meta</span>{eta && <span className="text-[12px] text-tx3">· {monthsText(months).replace('Cerca de ', '≈ ')}</span>}</span>}
+        visual={
+          <>
+            <div className="hg fl absolute left-2.5 right-6 top-[22px] h-[240px] rounded-[28px] flex items-center justify-center gap-6 px-6">
+              <div className="relative w-[126px] h-[126px] flex-none">
+                <svg viewBox="0 0 160 160" width="126" height="126" className="-rotate-90">
+                  <circle cx="80" cy="80" r="70" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="12" />
+                  <circle className="rgv" cx="80" cy="80" r="70" fill="none" stroke="#F5B83D" strokeWidth="12" strokeLinecap="round"
+                    style={{ '--to': 440 * (1 - progress / 100), filter: 'drop-shadow(0 0 8px rgba(245,184,61,.55))' } as React.CSSProperties} />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="mono text-[22px] font-bold tracking-[-.03em] text-[#F4F6F9]">{pct(progress, 1)}</span>
+                  <span className="text-[11px] text-tx2">da meta</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 min-w-0">
+                <span className="label-caps text-tx2 whitespace-nowrap">Meta de patrimônio</span>
+                <span className="mono text-[17px] font-bold text-[#F4F6F9] tracking-[-.02em] whitespace-nowrap">{brl(goal)}</span>
+                <span className="text-[12px] text-tx2 whitespace-nowrap">faltam <b className="mono text-accent font-semibold">{brl(Math.max(0, goal - patrimony))}</b></span>
+              </div>
+            </div>
+            {eta && (
+              <div className="hc fl absolute right-0 top-0" style={{ animationDuration: '6s', animationDelay: '-3s', borderColor: 'rgba(245,184,61,.5)' }}>
+                <span className="mono text-[12.5px] font-semibold text-tx">{monthsText(months).replace('Cerca de ', '≈ ')}</span>
+              </div>
+            )}
+          </>
         }
       />
 

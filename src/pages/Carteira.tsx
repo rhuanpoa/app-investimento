@@ -5,7 +5,7 @@ import { useStore } from '../data/store'
 import type { AssetType, Holding } from '../data/types'
 import { allocation, holdings, portfolioSeries, projection7d, totals } from '../lib/calc'
 import { brl, brlSigned, decimal, pct, pctArrow, qty as fmtQty, toneOf } from '../lib/format'
-import { AssetAvatar, Card, Chip, PageHeader, Seg, TYPE_META, TypeBadge } from '../components/ui'
+import { AssetAvatar, Card, Chip, Hero, Seg, TYPE_META, TypeBadge } from '../components/ui'
 import { AllocationDonut, AreaChart } from '../components/charts'
 import NovaOperacao from '../components/NovaOperacao'
 
@@ -28,12 +28,63 @@ function Kpi({ label, children, foot }: { label: string; children: React.ReactNo
   )
 }
 
+/** Linha suave da ilustração do hero, a partir de uma série */
+function heroPath(data: number[], w = 300, h = 100) {
+  if (data.length < 2) return null
+  const min = Math.min(...data), max = Math.max(...data), span = max - min || 1
+  const pts = data.map((v, i) => [(i / (data.length - 1)) * w, 8 + (1 - (v - min) / span) * (h - 16)])
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
+  return { line, area: `${line} L${w} ${h} L0 ${h} Z` }
+}
+
+function HeroVisual({ value, series, count, classes }: { value: number; series: number[]; count: number; classes: number }) {
+  const p = heroPath(series)
+  const chg = series.length > 1 && series[0] ? ((series[series.length - 1] - series[0]) / series[0]) * 100 : 0
+  return (
+    <>
+      <div className="hg fl absolute left-0 right-3.5 top-[30px] h-[210px] rounded-[26px] px-[22px] py-5 flex flex-col gap-1.5">
+        <span className="label-caps text-tx2">Evolução · 30 dias</span>
+        <span className="mono text-[26px] font-bold tracking-[-.03em] text-[#F4F6F9]">{brl(value)}</span>
+        {p ? (
+          <svg viewBox="0 0 300 100" preserveAspectRatio="none" width="100%" height="84" className="mt-auto overflow-visible">
+            <defs><linearGradient id="hsg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={chg >= 0 ? '#2EBD85' : '#FF5A6E'} stopOpacity=".4" /><stop offset="1" stopColor={chg >= 0 ? '#2EBD85' : '#FF5A6E'} stopOpacity="0" /></linearGradient></defs>
+            <path className="ai" d={p.area} fill="url(#hsg)" />
+            <path className="dr" style={{ '--len': 1000 } as React.CSSProperties} pathLength={1000} d={p.line} fill="none" stroke={chg >= 0 ? '#2EBD85' : '#FF5A6E'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          </svg>
+        ) : <span className="mt-auto text-[12px] text-tx3">histórico em formação</span>}
+      </div>
+      {series.length > 1 && (
+        <div className="hc fl absolute right-0 top-0" style={{ animationDuration: '5s', animationDelay: '-2s', borderColor: chg >= 0 ? 'rgba(46,189,133,.5)' : 'rgba(255,90,110,.5)' }}>
+          <span className="pd" /><span className={`mono text-[12.5px] font-semibold ${toneOf(chg)}`}>{pctArrow(chg)} em 30 dias</span>
+        </div>
+      )}
+      <div className="hc fl absolute left-2 bottom-2" style={{ animationDuration: '7s', animationDelay: '-4s', borderColor: 'rgba(245,184,61,.5)' }}>
+        <span className="mono text-[12.5px] font-semibold text-tx">{count} {count === 1 ? 'ativo' : 'ativos'} · {classes} {classes === 1 ? 'classe' : 'classes'}</span>
+      </div>
+    </>
+  )
+}
+
+function EmptyVisual() {
+  const items: [string, string, string][] = [['Ação', 'top-5 left-10', '6s'], ['FII', 'top-[100px] left-[150px]', '7s'], ['Cripto', 'top-[180px] left-5', '5s']]
+  return (
+    <>
+      {items.map(([l, pos, d], i) => (
+        <div key={l} className={`hg fl absolute ${pos} flex items-center gap-2.5 px-[18px] py-3.5 rounded-2xl`} style={{ animationDuration: d, animationDelay: `-${2.5 + i * 0.5}s` }}>
+          <span className="w-7 h-7 rounded-full border border-accent text-accent inline-flex items-center justify-center"><Plus size={15} /></span>
+          <span className="text-[14px] font-semibold text-tx">{l}</span>
+        </div>
+      ))}
+    </>
+  )
+}
+
 function EmptyState({ onNew }: { onNew: () => void }) {
   return (
     <>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 lg:gap-4">
         {['Total investido', 'Valor atual', 'Lucro / Prejuízo', 'Proventos recebidos'].map((l) => (
-          <Kpi key={l} label={l}><span className="mono text-[16px] lg:text-[22px] font-semibold text-tx3">R$ 0,00</span></Kpi>
+          <Kpi key={l} label={l}><span className="mono text-[16px] font-semibold lg:text-[25px] lg:font-bold lg:tracking-[-.03em] whitespace-nowrap text-tx3">R$ 0,00</span></Kpi>
         ))}
       </div>
       <Card>
@@ -104,6 +155,7 @@ export default function Carteira() {
   const alloc = allocation(rows)
   const proj = useMemo(() => projection7d(rows, quotes), [rows, quotes])
   const series = useMemo(() => portfolioSeries(rows, quotes, RANGE_DAYS[range]), [rows, quotes, range])
+  const series30 = useMemo(() => portfolioSeries(rows, quotes, 31), [rows, quotes])
   const divTotal = dividends.reduce((s, d) => s + d.amount, 0)
   const classes = new Set(rows.map((r) => r.type)).size
   const now = (quotesUpdatedAt ?? new Date()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -119,32 +171,35 @@ export default function Carteira() {
 
   return (
     <>
-      <PageHeader
-        title="Minha Carteira"
-        subtitle={rows.length ? `${rows.length} ativos · cotações verificadas às ${now} (B3 com atraso de até 30 min)` : 'Nenhum ativo cadastrado'}
-        action={newBtn}
+      <Hero
+        pill={rows.length ? 'Cotações da B3 com atraso de até 30 min' : 'Comece pela primeira operação'}
+        title="Minha" highlight="Carteira"
+        subtitle={rows.length ? `${rows.length} ${rows.length === 1 ? 'ativo' : 'ativos'} · cotações verificadas às ${now}` : 'Nenhum ativo cadastrado'}
+        actions={newBtn}
+        mobileExtra={rows.length ? <span className="hc"><span className="pd" /><span className={`mono text-[12px] font-semibold ${toneOf(t.pnl)}`}>{pctArrow(t.pnlPct)} sobre o investido</span></span> : undefined}
+        visual={rows.length ? <HeroVisual value={t.value} series={series30} count={rows.length} classes={classes} /> : <EmptyVisual />}
       />
 
       {!rows.length ? <EmptyState onNew={() => setModal(true)} /> : (
         <>
           <div className="grid gap-2.5 lg:gap-4 grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
             <Kpi label="Total investido" foot={<div className="text-[12px] text-tx3">{rows.length} ativos em {classes} {classes === 1 ? 'classe' : 'classes'}</div>}>
-              <span className="mono text-[16px] lg:text-[22px] font-semibold">{brl(t.invested)}</span>
+              <span className="mono text-[16px] font-semibold lg:text-[25px] lg:font-bold lg:tracking-[-.03em] whitespace-nowrap">{brl(t.invested)}</span>
             </Kpi>
             <Kpi label="Valor atual" foot={<div className="text-[12px] text-tx3">cotações das {now}</div>}>
-              <span className="mono text-[16px] lg:text-[22px] font-semibold">{brl(t.value)}</span>
+              <span className="mono text-[16px] font-semibold lg:text-[25px] lg:font-bold lg:tracking-[-.03em] whitespace-nowrap">{brl(t.value)}</span>
             </Kpi>
             <Kpi label="Lucro / Prejuízo" foot={<div className="flex items-center gap-2"><span className={`mono text-[13px] font-semibold ${toneOf(t.pnl)}`}>{pctArrow(t.pnlPct)}</span><span className="text-[12px] text-tx3 max-lg:hidden">sobre o investido</span></div>}>
-              <span className={`mono text-[16px] lg:text-[22px] font-semibold ${toneOf(t.pnl)}`}>{brlSigned(t.pnl)}</span>
+              <span className={`mono text-[16px] font-semibold lg:text-[25px] lg:font-bold lg:tracking-[-.03em] whitespace-nowrap ${toneOf(t.pnl)}`}>{brlSigned(t.pnl)}</span>
             </Kpi>
             <Kpi label="Proventos recebidos" foot={<div className="text-[12px] text-tx3">últimos 12 meses</div>}>
-              <span className="mono text-[16px] lg:text-[22px] font-semibold">{brl(divTotal)}</span>
+              <span className="mono text-[16px] font-semibold lg:text-[25px] lg:font-bold lg:tracking-[-.03em] whitespace-nowrap">{brl(divTotal)}</span>
             </Kpi>
             <Card className="p-4 lg:p-[18px] max-lg:col-span-2" style={{ borderColor: 'rgba(245,184,61,0.28)' }}>
               <div className="flex flex-col gap-3 h-full justify-between">
                 <div className="flex flex-col gap-2">
                   <div className="label-caps">Estimativa 7 dias</div>
-                  <span className="mono text-[16px] lg:text-[22px] font-semibold">{brl(proj.mid)}</span>
+                  <span className="mono text-[16px] font-semibold lg:text-[25px] lg:font-bold lg:tracking-[-.03em] whitespace-nowrap">{brl(proj.mid)}</span>
                   <div className="flex gap-4">
                     <span className="flex flex-col"><span className="mono text-[12px] font-medium text-loss">▼ {decimal(proj.low)}</span><span className="text-[11px] text-tx3">pessimista</span></span>
                     <span className="flex flex-col"><span className="mono text-[12px] font-medium text-profit">▲ {decimal(proj.high)}</span><span className="text-[11px] text-tx3">otimista</span></span>
@@ -208,7 +263,7 @@ export default function Carteira() {
             </div>
           </div>
 
-          <div className="lg:bg-s1 lg:border lg:border-line lg:rounded-[10px] lg:overflow-hidden">
+          <div className="card-lg">
             <div className="flex items-center justify-between gap-3 flex-wrap lg:py-3 lg:px-5 max-lg:mb-3">
               <h2 className="h-card">Ativos<span className="text-tx3 font-normal ml-1.5">{shown.length}</span></h2>
               <div className="flex gap-2 overflow-x-auto hs">

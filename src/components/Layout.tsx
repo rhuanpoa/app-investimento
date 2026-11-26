@@ -2,7 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { CircleHelp, Newspaper, SlidersHorizontal, Wallet, type LucideIcon } from 'lucide-react'
 import UserMenu from './UserMenu'
 import { useStore } from '../data/store'
-import { Logo } from './ui'
+import { Ambient, Logo } from './ui'
 import { pctArrow, toneOf } from '../lib/format'
 
 const NAV: { to: string; label: string; short: string; icon: LucideIcon }[] = [
@@ -14,11 +14,11 @@ const NAV: { to: string; label: string; short: string; icon: LucideIcon }[] = [
 
 function TickerStrip() {
   const { indices } = useStore()
-  if (!indices.length) return <div className="h-[34px] flex-none bg-s0 border-b border-line max-lg:hidden" aria-hidden="true" />
+  if (!indices.length) return <div className="relative z-10 h-[34px] flex-none glass-bar border-b border-line max-lg:hidden" aria-hidden="true" />
   const reps = Math.max(2, Math.ceil(8 / indices.length) * 2)
   const items = Array.from({ length: reps }, () => indices).flat()
   return (
-    <div aria-label="Índices de mercado" className="h-[34px] flex-none bg-s0 border-b border-line overflow-hidden flex items-center max-lg:hidden">
+    <div aria-label="Índices de mercado" className="relative z-10 h-[34px] flex-none glass-bar border-b border-line overflow-hidden flex items-center ticker-mask max-lg:hidden">
       <div className="ticker-track">
         {items.map((it, i) => (
           <span key={i} className="inline-flex items-center gap-2 mr-10 whitespace-nowrap" aria-hidden={i >= indices.length}>
@@ -41,18 +41,19 @@ export default function Layout() {
       : null
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg text-tx">
+    <div className="relative min-h-screen flex flex-col bg-bg text-tx isolate">
+      <Ambient />
       <TickerStrip />
 
       {/* Cabeçalho do celular */}
-      <header className="lg:hidden sticky top-0 z-30 h-14 flex-none flex items-center justify-between pl-4 pr-2 bg-s0 border-b border-line">
+      <header className="lg:hidden sticky top-0 z-30 h-14 flex-none flex items-center justify-between pl-4 pr-2 glass-bar border-b border-line">
         <Logo />
         <UserMenu compact />
       </header>
 
-      <div className="flex flex-1">
+      <div className="relative z-[1] flex flex-1">
         {/* Menu lateral (desktop) */}
-        <aside className="max-lg:hidden sticky top-0 h-screen flex-[0_0_232px] w-[232px] bg-s0 border-r border-line flex flex-col pt-[18px] px-3 pb-4">
+        <aside className="max-lg:hidden sticky top-0 h-screen flex-[0_0_232px] w-[232px] glass-bar border-r border-line flex flex-col pt-[18px] px-3 pb-4">
           <div className="pt-1 px-2 pb-[22px]"><Logo /></div>
           <nav aria-label="Navegação principal" className="flex flex-col gap-1">
             {NAV.map(({ to, label, icon: Icon }) => (
@@ -73,7 +74,7 @@ export default function Layout() {
           </div>
         </aside>
 
-        <main className="flex-1 min-w-0 px-4 pt-4 pb-24 lg:px-8 lg:pt-7 lg:pb-12 flex flex-col gap-4 lg:gap-6">
+        <main className="page-in flex-1 min-w-0 px-4 pt-4 pb-28 lg:px-10 lg:pt-7 lg:pb-16 flex flex-col gap-4 lg:gap-6">
           {notice && (
             <div className="lg:hidden p-3 rounded-lg text-[12px] text-tx2" style={{ background: 'rgba(245,184,61,0.08)', border: '1px solid rgba(245,184,61,0.3)' }}>
               <span className="font-semibold text-accent">{notice.title}</span> {notice.short}
@@ -84,10 +85,10 @@ export default function Layout() {
       </div>
 
       {/* Barra inferior (celular) */}
-      <nav aria-label="Navegação principal" className="lg:hidden fixed bottom-0 inset-x-0 z-30 grid grid-cols-4 bg-s0 border-t border-line">
+      <nav aria-label="Navegação principal" className="mnav lg:hidden fixed z-30 grid grid-cols-4">
         {NAV.map(({ to, short, icon: Icon }) => (
           <NavLink key={to} to={to}
-            className={({ isActive }) => `flex flex-col items-center justify-center gap-1 min-h-16 text-[11px] ${isActive ? 'text-accent font-semibold' : 'text-tx2 font-medium'}`}>
+            className={({ isActive }) => `flex flex-col items-center justify-center gap-1 min-h-16 text-[11px] ${isActive ? 'active text-accent font-semibold' : 'text-tx2 font-medium'}`}>
             <Icon size={22} strokeWidth={1.75} aria-hidden="true" />
             {short}
           </NavLink>
