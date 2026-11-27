@@ -1,5 +1,5 @@
 import { useMemo, useState, type DragEvent } from 'react'
-import { BellRing, Check, ChevronDown, ChevronUp, GripVertical, Plus, Save, TrendingUp, Trash2, X } from 'lucide-react'
+import { BellRing, Check, ChevronDown, ChevronUp, GripVertical, Pencil, Plus, Save, TrendingUp, Trash2, X } from 'lucide-react'
 import { uid, useStore } from '../data/store'
 import { NEWS_SOURCES } from '../data/mock'
 import type { AlertKind, AssetType, InvestorProfile, PriceAlert, RiskProfile } from '../data/types'
@@ -32,21 +32,32 @@ function monthsText(m: number) {
   return `Cerca de ${parts.join(' e ')}`
 }
 
-function NovoAlerta({ onAdd, onCancel }: { onAdd: (a: PriceAlert) => void; onCancel: () => void }) {
-  const { ensureQuote } = useStore()
-  const [asset, setAsset] = useState<SearchResult | null>(null)
-  const [kind, setKind] = useState<AlertKind>('preco_abaixo')
-  const [val, setVal] = useState('')
+/** Formulário de alerta: cria um novo ou edita um existente */
+function AlertaForm({ initial, onSave, onCancel, onDelete }: {
+  initial?: PriceAlert
+  onSave: (a: PriceAlert) => void
+  onCancel: () => void
+  onDelete?: () => void
+}) {
+  const { ensureQuote, quotes } = useStore()
+  const q0 = initial ? quotes.get(initial.ticker) : undefined
+  const [asset, setAsset] = useState<SearchResult | null>(
+    initial ? { ticker: initial.ticker, name: q0?.name ?? initial.ticker, type: q0?.type ?? 'acao', sourceId: q0?.sourceId } : null,
+  )
+  const [kind, setKind] = useState<AlertKind>(initial?.kind ?? 'preco_abaixo')
+  const [val, setVal] = useState(initial ? decimal(initial.value) : '')
+  const [confirmDel, setConfirmDel] = useState(false)
   const v = parseBR(val)
   const ok = asset && v > 0
   return (
-    <div className="flex flex-col gap-3 p-4 rounded-[10px] bg-s0 border border-line">
+    <div className="flex flex-col gap-3 p-4 rounded-[14px] bg-s0 border border-line my-2">
+      {initial && <span className="label-caps">Editar alerta</span>}
       <AssetSearch label="Ativo" value={asset} onSelect={(q) => { setAsset(q); void ensureQuote(q) }} />
       <div className="grid grid-cols-2 gap-3">
         <Field label="Condição">
           <span className="field-box">
             <select value={kind} onChange={(e) => setKind(e.target.value as AlertKind)}>
-              {(Object.keys(ALERT_LABEL) as AlertKind[]).map((k) => <option key={k} value={k}>{ALERT_LABEL[k].kind} {ALERT_LABEL[k].verb.replace('com ', '')}</option>)}
+              {(Object.keys(ALERT_LABEL) as AlertKind[]).map((k) => <option key={k} value={k}>{k.startsWith('preco') ? `Preço ${ALERT_LABEL[k].verb}` : ALERT_LABEL[k].verb.replace('com ', '')}</option>)}
             </select>
           </span>
         </Field>
@@ -58,12 +69,25 @@ function NovoAlerta({ onAdd, onCancel }: { onAdd: (a: PriceAlert) => void; onCan
           </span>
         </Field>
       </div>
-      <div className="flex justify-end gap-2">
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
-        <button type="button" className="btn btn-primary" disabled={!ok}
-          onClick={() => ok && onAdd({ id: uid(), ticker: asset.ticker, kind, value: v, active: true })}>
-          <Check size={18} />Criar alerta
-        </button>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {onDelete && (
+          confirmDel ? (
+            <span className="mr-auto flex items-center gap-2">
+              <span className="text-[13px] text-tx2">Excluir este alerta?</span>
+              <button type="button" className="btn btn-danger h-10" onClick={onDelete}><Trash2 size={16} />Excluir</button>
+              <button type="button" className="btn btn-ghost h-10 px-2" onClick={() => setConfirmDel(false)}>Não</button>
+            </span>
+          ) : (
+            <button type="button" className="btn btn-danger h-10 mr-auto" onClick={() => setConfirmDel(true)}><Trash2 size={16} />Excluir</button>
+          )
+        )}
+        {!confirmDel && <>
+          <button type="button" className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
+          <button type="button" className="btn btn-primary" disabled={!ok}
+            onClick={() => ok && onSave({ id: initial?.id ?? uid(), ticker: asset.ticker, kind, value: v, active: initial?.active ?? true })}>
+            <Check size={18} />{initial ? 'Aplicar' : 'Criar alerta'}
+          </button>
+        </>}
       </div>
     </div>
   )
@@ -71,13 +95,21 @@ function NovoAlerta({ onAdd, onCancel }: { onAdd: (a: PriceAlert) => void; onCan
 
 export default function Painel() {
   const store = useStore()
-  const { quotes, transactions, savePanel, ensureQuote } = store
+  const { quotes, transactions, savePanel, saveAlerts, ensureQuote } = store
   const [p, setP] = useState<InvestorProfile>(store.profile)
   const [goalS, setGoalS] = useState(decimal(store.profile.goal))
   const [monthlyS, setMonthlyS] = useState(decimal(store.profile.monthly))
   const [watch, setWatch] = useState<string[]>(store.watchlist)
-  const [alerts, setAlerts] = useState<PriceAlert[]>(store.alerts)
+  const [alerts, setAlertsState] = useState<PriceAlert[]>(store.alerts)
+  const [alertMsg, setAlertMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  /** Alertas são salvos na hora (o servidor usa para as notificações) */
+  const setAlerts = (fn: (s: PriceAlert[]) => PriceAlert[]) => {
+    const next = fn(alerts)
+    setAlertsState(next)
+    void saveAlerts(next).then((err) => setAlertMsg(err ? { ok: false, text: `Não foi possível salvar o alerta: ${err}` } : { ok: true, text: 'Alerta salvo.' }))
+  }
   const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [showAllWatch, setShowAllWatch] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -94,7 +126,6 @@ export default function Painel() {
 
   const dirty = JSON.stringify({ ...p, goal, monthly }) !== JSON.stringify(store.profile)
     || JSON.stringify(watch) !== JSON.stringify(store.watchlist)
-    || JSON.stringify(alerts) !== JSON.stringify(store.alerts)
 
   const [saveError, setSaveError] = useState('')
   const save = async () => {
@@ -273,10 +304,10 @@ export default function Painel() {
                       </button>
                       <div className="flex items-center gap-2.5 flex-1 min-w-0">
                         <span className="mono text-[14px] font-semibold">{t}</span>
-                        {q && <TypeBadge type={q.type} />}
+                        {q && <span className="max-sm:hidden"><TypeBadge type={q.type} /></span>}
                         <span className="text-[12px] text-tx3 truncate max-sm:hidden">{q?.name ?? 'buscando cotação…'}</span>
                       </div>
-                      <span className="w-[112px] text-right mono text-[13px] font-medium whitespace-nowrap">{q ? brl(q.price) : '—'}</span>
+                      <span className="sm:w-[112px] text-right mono text-[13px] font-medium whitespace-nowrap">{q ? brl(q.price) : '—'}</span>
                       <span className="w-[72px] text-right">{q && <Delta value={q.changeDay} />}</span>
                       <button type="button" className="btn-icon" aria-label={`Remover ${t}`} onClick={() => setWatch((w) => w.filter((x) => x !== t))}><Trash2 size={18} /></button>
                     </div>
@@ -295,13 +326,22 @@ export default function Painel() {
           <Card className="p-4 lg:p-5">
             <div className="flex flex-col gap-3">
               <SectionHead n={5} title="Alertas" desc="Avisos quando uma condição for atingida."
-                action={!adding && <button type="button" className="btn btn-secondary h-10" onClick={() => setAdding(true)}><Plus size={18} />Novo alerta</button>} />
-              {adding && <NovoAlerta onCancel={() => setAdding(false)} onAdd={(a) => { setAlerts((s) => [...s, a]); setAdding(false) }} />}
+                action={!adding && <button type="button" className="btn btn-secondary h-10" onClick={() => { setEditing(null); setAdding(true) }}><Plus size={18} />Novo alerta</button>} />
+              {adding && <AlertaForm onCancel={() => setAdding(false)} onSave={(a) => { setAlerts((s) => [...s, a]); setAdding(false); setEditing(null) }} />}
               <div>
                 {alerts.map((a) => {
                   const fired = alertTriggered(a, quotes.get(a.ticker))
+                  if (editing === a.id) {
+                    return (
+                      <div key={a.id} className="border-t border-line">
+                        <AlertaForm initial={a} onCancel={() => setEditing(null)}
+                          onSave={(n) => { setAlerts((s) => s.map((x) => (x.id === a.id ? n : x))); setEditing(null) }}
+                          onDelete={() => { setAlerts((s) => s.filter((x) => x.id !== a.id)); setEditing(null) }} />
+                      </div>
+                    )
+                  }
                   return (
-                    <div key={a.id} className="flex items-center gap-3 min-h-16 border-t border-line">
+                    <div key={a.id} className="flex items-center gap-2 sm:gap-3 min-h-16 border-t border-line">
                       <span className="w-9 h-9 rounded-full flex-none inline-flex items-center justify-center"
                         style={fired ? { background: 'rgba(245,184,61,0.12)', border: '1px solid rgba(245,184,61,0.35)' } : { background: '#181D24', border: '1px solid #313A45' }}>
                         <BellRing size={17} className={fired ? 'text-accent' : 'text-tx3'} aria-hidden="true" />
@@ -320,11 +360,13 @@ export default function Painel() {
                         </div>
                       </div>
                       <Toggle label={`Alerta ${a.ticker}`} on={a.active} onChange={(v) => setAlerts((s) => s.map((x) => (x.id === a.id ? { ...x, active: v } : x)))} />
+                      <button type="button" className="btn-icon" aria-label={`Editar alerta ${a.ticker}`} onClick={() => { setAdding(false); setEditing(a.id) }}><Pencil size={17} /></button>
                       <button type="button" className="btn-icon max-sm:hidden" aria-label={`Excluir alerta ${a.ticker}`} onClick={() => setAlerts((s) => s.filter((x) => x.id !== a.id))}><Trash2 size={18} /></button>
                     </div>
                   )
                 })}
               </div>
+              {alertMsg && <span role="status" className={`text-[12.5px] ${alertMsg.ok ? 'text-profit' : 'text-loss'}`}>{alertMsg.text}</span>}
               <PushSetup />
             </div>
           </Card>

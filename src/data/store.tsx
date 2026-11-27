@@ -144,10 +144,33 @@ interface Ctx extends Data {
   logout: () => Promise<void>
   addTransaction: (tx: Transaction) => Promise<string | null>
   savePanel: (p: { profile: InvestorProfile; watchlist: string[]; alerts: PriceAlert[] }) => Promise<string | null>
+  /** Salva só os alertas, na hora */
+  saveAlerts: (alerts: PriceAlert[]) => Promise<string | null>
   addHelp: (item: HelpItem) => Promise<string | null>
 }
 
 const StoreCtx = createContext<Ctx | null>(null)
+
+/** Grava a lista completa de alertas do usuário (apaga os removidos, insere/atualiza os demais) */
+async function writeAlerts(userId: string, alerts: PriceAlert[]) {
+  if (!supabase) return
+  const keep = alerts.map((a) => a.id)
+  const r4 = keep.length
+    ? await supabase.from('price_alerts').delete().eq('user_id', userId).not('id', 'in', `(${keep.join(',')})`)
+    : await supabase.from('price_alerts').delete().eq('user_id', userId)
+  if (r4.error) throw r4.error
+  if (alerts.length) {
+    // Alerta editado (ativo, condição ou valor) volta a poder avisar hoje
+    const { data: prev } = await supabase.from('price_alerts').select('id, ticker, kind, value, notified_at').eq('user_id', userId)
+    const before = new Map((prev ?? []).map((r) => [r.id, r]))
+    const r5 = await supabase.from('price_alerts').upsert(alerts.map((a) => {
+      const was = before.get(a.id)
+      const same = was && was.ticker === a.ticker && was.kind === a.kind && +was.value === a.value
+      return { id: a.id, ticker: a.ticker, kind: a.kind, value: a.value, active: a.active, notified_at: same ? was.notified_at : null }
+    }))
+    if (r5.error) throw r5.error
+  }
+}
 
 function msg(e: unknown) {
   return e && typeof e === 'object' && 'message' in e ? String((e as { message: string }).message) : 'Erro inesperado'
@@ -272,6 +295,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return null
   }, [])
 
+  const saveAlerts = useCallback(async (alerts: PriceAlert[]) => {
+    if (supabase) {
+      try {
+        const { data: { user: u } } = await supabase.auth.getUser()
+        if (!u) return 'Sessão expirada. Entre novamente.'
+        await writeAlerts(u.id, alerts)
+      } catch (e) { return msg(e) }
+    }
+    setData((d) => ({ ...d, alerts }))
+    return null
+  }, [])
+
   const savePanel = useCallback(async ({ profile, watchlist, alerts }: { profile: InvestorProfile; watchlist: string[]; alerts: PriceAlert[] }) => {
     if (supabase) {
       try {
@@ -288,15 +323,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const r3 = await supabase.from('watchlist').insert(watchlist.map((t, i) => ({ ticker: t, position: i })))
           if (r3.error) throw r3.error
         }
-        const keep = alerts.map((a) => a.id)
-        const r4 = keep.length
-          ? await supabase.from('price_alerts').delete().eq('user_id', u.id).not('id', 'in', `(${keep.join(',')})`)
-          : await supabase.from('price_alerts').delete().eq('user_id', u.id)
-        if (r4.error) throw r4.error
-        if (alerts.length) {
-          const r5 = await supabase.from('price_alerts').upsert(alerts.map((a) => ({ id: a.id, ticker: a.ticker, kind: a.kind, value: a.value, active: a.active })))
-          if (r5.error) throw r5.error
-        }
+        await writeAlerts(u.id, alerts)
       } catch (e) { return msg(e) }
     }
     setData((d) => ({ ...d, profile, watchlist, alerts }))
@@ -321,9 +348,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Ctx>(() => ({
     ...data, user, ready, demo, quotes, indices, quotesUpdatedAt, quoteErrors,
     refreshQuotes, searchAssets, ensureQuote,
-    login, logout, addTransaction, savePanel, addHelp,
+    login, logout, addTransaction, savePanel, saveAlerts, addHelp,
   }), [data, user, ready, demo, quotes, indices, quotesUpdatedAt, quoteErrors, refreshQuotes, searchAssets, ensureQuote,
-    login, logout, addTransaction, savePanel, addHelp])
+    login, logout, addTransaction, savePanel, saveAlerts, addHelp])
 
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }
